@@ -1,0 +1,44 @@
+/* 👄 Sound Lab + 🐣 Bootcamp */
+.sl-hero { display: flex; align-items: center; gap: 1rem; border-radius: 18px; padding: 1.1rem 1.3rem; border: 2px solid var(--border-gold); margin-bottom: 1rem; flex-wrap: wrap; }
+.sl-hero img { width: 92px; height: 92px; border-radius: 50%; object-fit: cover; border: 3px solid #fde047; flex: none; }
+.sl-hero h2 { font-size: 1.55rem; font-weight: 900; color: #fff; margin: 0.15rem 0; }
+.sl-hero p { color: #e2e8f0; max-width: 760px; }
+.sl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.7rem; }
+.sl-card { position: relative; text-align: left; background: var(--bg-panel); border: 2px solid rgba(148, 163, 184, 0.25); border-radius: 16px; padding: 0.85rem; color: #fff; cursor: pointer; transition: transform 0.15s, border-color 0.15s; }
+.sl-card:hover { transform: translateY(-3px); border-color: #38bdf8; }
+.sl-card.done { border-color: rgba(16, 185, 129, 0.7); }
+.sl-card.rec { border-color: #fde047; box-shadow: 0 0 18px rgba(253, 224, 71, 0.25); }
+.sl-rec { position: absolute; top: -10px; right: 10px; background: #fde047; color: #050814; font-size: 0.68rem; font-weight: 900; padding: 0.1rem 0.5rem; border-radius: 99px; }
+.sl-num { font-size: 0.72rem; font-weight: 900; color: #94a3b8; }
+.sl-title { font-size: 1.1rem; font-weight: 900; margin: 0.15rem 0; }
+.sl-ipa { color: #7dd3fc; font-weight: 800; font-size: 0.9rem; }
+.sl-meta { color: #fde047; font-size: 0.74rem; font-weight: 800; margin-top: 0.4rem; }
+.sl-head { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+.sl-tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.8rem; }
+.sl-teacher { display: flex; gap: 0.7rem; align-items: flex-start; margin-bottom: 0.8rem; }
+.sl-teacher img { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 2px solid #fde047; flex: none; }
+.sl-teacher .tb-body { display: flex; flex-direction: column; gap: 0.4rem; }
+.sl-hint { color: #bae6fd; }
+.sl-spell { color: #cbd5e1; font-size: 0.9rem; }
+.sl-chip { display: inline-block; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 0.05rem 0.45rem; margin: 0.1rem; font-weight: 800; color: #e0f2fe; }
+.sl-examples { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem; margin-bottom: 0.6rem; }
+.sl-slow { position: absolute; top: 0.4rem; right: 0.4rem; padding: 0.15rem 0.45rem !important; font-size: 0.72rem !important; }
+.sl-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin: 0.8rem 0; }
+.sl-opt { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; padding: 1.1rem 0.6rem; border-radius: 16px; border: 2px solid rgba(148, 163, 184, 0.35); background: rgba(15, 23, 42, 0.9); color: #fff; cursor: pointer; transition: transform 0.12s, border-color 0.12s; }
+.sl-opt:hover:not(:disabled) { transform: translateY(-2px); border-color: #38bdf8; }
+.sl-opt b { font-size: 1.6rem; font-weight: 900; color: #fde047; }
+.sl-opt span:last-child { color: #94a3b8; font-size: 0.86rem; }
+.sl-opt.correct { border-color: #10b981; background: rgba(16, 185, 129, 0.18); }
+.sl-opt.wrong { border-color: #f43f5e; background: rgba(244, 63, 94, 0.15); }
+.bc-path { display: flex; flex-direction: column; gap: 0.55rem; max-width: 720px; margin: 0 auto 1rem; position: relative; }
+.bc-node { display: flex; align-items: center; gap: 0.8rem; text-align: left; padding: 0.7rem 0.9rem; border-radius: 16px; border: 2px solid rgba(148, 163, 184, 0.25); background: var(--bg-panel); color: #fff; cursor: pointer; transition: transform 0.15s; }
+.bc-node:hover:not(:disabled) { transform: translateX(4px); }
+.bc-node b { display: block; font-size: 1.02rem; } .bc-node small { color: #94a3b8; }
+.bc-node.done { border-color: rgba(16, 185, 129, 0.7); }
+.bc-node.cur { border-color: #fde047; box-shadow: 0 0 20px rgba(253, 224, 71, 0.25); }
+.bc-node.locked { opacity: 0.5; cursor: not-allowed; }
+.bc-dot { width: 38px; height: 38px; flex: none; border-radius: 50%; display: grid; place-items: center; font-weight: 900; background: #1e293b; border: 2px solid #fde047; }
+.bc-node.done .bc-dot { background: #065f46; border-color: #10b981; }
+.bc-phrases { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 0.5rem; }
+.bc-final { max-width: 720px; margin: 0 auto; text-align: center; }
+@media (max-width: 640px) { .sl-pair { grid-template-columns: 1fr; } }

@@ -1,0 +1,12 @@
+tts_cache/
+Course_Materials/
+*.pdf
+*.txt
+!robots.txt
+*.py
+*.bat
+*.ico
+*.tmp
+save_data.json
+save_data.backup.json
+__pycache__/
