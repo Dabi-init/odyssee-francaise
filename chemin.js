@@ -30,7 +30,7 @@
   const PRIV_STORAGE_KEY = "ODYSSEE_PRIVATE_AUTH_V24";
   const CLOUD_TOPIC = "odyssee_srt_priv24_8e3f9a1c7b2d4065e9a2c4f8";
   const CLOUD_GIST_ID = "6828a599232d8fea3069b7b45a4b14dd";
-  const TABLET_PWA_URL = "https://dabi-init.github.io/odyssee-francaise/?k=srt_ody24_7f9a3e1c8b4d2065a9e4&v=25.0";
+  const TABLET_PWA_URL = "https://dabi-init.github.io/odyssee-francaise/?k=srt_ody24_7f9a3e1c8b4d2065a9e4&v=26.0";
   const CLOUD_SYNC = {
     hydrated: false,
     syncing: false,
@@ -115,7 +115,7 @@
       <div class="ody-private-gate" id="ody-private-gate">
         <div class="priv-gate-card">
           <div class="priv-gate-badge">🔒 ESPACE PRIVÉ EXCLUSIF · ACCÈS RESTREINT</div>
-          <img src="assets/odyssee_icon.png?v=25.0" class="priv-gate-icon" alt="">
+          <img src="assets/odyssee_icon.png?v=26.0" class="priv-gate-icon" alt="">
           <h2>L'Odyssée Française · Édition Privée</h2>
           <p class="priv-gate-sub">Cet espace d'apprentissage et sa sauvegarde Cloud sont strictement privés et réservés exclusivement à leur propriétaire. Aucun accès public n'est autorisé.</p>
           <div class="priv-gate-form">
@@ -455,6 +455,12 @@
         c.bonds = c.bonds || {};
         Object.keys(ec.bonds).forEach((k) => {
           if (typeof ec.bonds[k] === "number" && ec.bonds[k] > (c.bonds[k] || 0)) { c.bonds[k] = ec.bonds[k]; changed = true; }
+        });
+      }
+      if (ec.chroniquesDone && typeof ec.chroniquesDone === "object") {
+        c.chroniquesDone = c.chroniquesDone || {};
+        Object.keys(ec.chroniquesDone).forEach((k) => {
+          if (!c.chroniquesDone[k] && ec.chroniquesDone[k]) { c.chroniquesDone[k] = ec.chroniquesDone[k]; changed = true; }
         });
       }
       if (ec.sealsClaimed && typeof ec.sealsClaimed === "object") {
@@ -4926,7 +4932,7 @@
 
   // ----------------------------------------------------------------- renderers
   const camille = (sz = "") => `<img class="ody-cam ${sz}" src="${PORTRAIT}" alt="Camille">`;
-  const audioBtns = (fr, big) => `<div class="ody-audio ${big ? "big" : ""}"><button class="ody-play" data-a="play" title="Listen (Space)">🔊</button><button class="ody-slow" data-a="slow" title="Slowly">🐢</button></div>`;
+  const audioBtns = (fr, big) => `<div class="ody-audio ${big ? "big" : ""}"><button class="ody-play" data-a="play" title="Listen 1.0x (Space)">🔊</button><button class="ody-slow" data-a="slow" title="Slowly 0.7x (Shift+Space)">🐢</button><button class="ody-fast" data-a="fast" title="Vitesse Parisienne 1.25x (Alt+Space)">⚡</button></div>`;
   const RENDER = {
     unknown: () => `<p>…</p>`,
     intro(st) {
@@ -5566,9 +5572,10 @@
 
   // ----------------------------------------------------------------- actions
   const ACT = {
-    say(el) { speak(el.dataset.t); },
-    play() { const st = cur(); if (st) speak(st.fr || st.npc); },
+    say(el) { speak(el.dataset.t, +(el.dataset.r || 1)); },
+    play() { const st = cur(); if (st) speak(st.fr || st.npc, 1); },
     slow() { const st = cur(); if (st) speak(st.fr || st.npc, 0.7); },
+    fast() { const st = cur(); if (st) speak(st.fr || st.npc, 1.25); },
     playnpc() { const st = cur(); if (st) speak(st.npc); },
     stopaudio() { stopAudio(); },
     readall() { const st = cur(); if (st) speak(st.text); },
@@ -6487,6 +6494,18 @@
       if (n.kind === "atelier" && n.data) { s.completedWritings = s.completedWritings || {}; s.completedWritings[n.data.id] = true; }
     }
     if (S.mode === "review") { c.lastReview = today(); }
+    if (S.mode && String(S.mode).startsWith("chronique_") && passedSession) {
+      const epId = String(S.mode).slice("chronique_".length);
+      c.chroniquesDone = c.chroniquesDone || {};
+      const firstEp = !c.chroniquesDone[epId];
+      c.chroniquesDone[epId] = true;
+      const ep = getChroniques().find((x) => x.id === epId);
+      c.reputation = (c.reputation || 0) + (firstEp ? 25 : 10);
+      if (ep && ep.friendId) addBond(ep.friendId, firstEp ? 20 : 8);
+      if (firstEp && ep) {
+        setTimeout(() => toast(`🎬 ${ep.title} accompli !`, `+25 ⚜️ Réputation · +20 ❤️ Lien avec ${ep.friendName}`, "🎬"), 500);
+      }
+    }
     if (c.daily.date !== today()) c.daily = { date: today(), xp: 0, sessions: 0, nodes: 0, capsules: 0 };
     c.daily.sessions += 1;
     c.daily.capsules = (c.daily.capsules || 0) + 1;
@@ -7003,6 +7022,92 @@
     </section>`;
   }
 
+  function getChroniques() {
+    return Array.isArray(window.CHRONIQUES_DE_PARIS) ? window.CHRONIQUES_DE_PARIS : [];
+  }
+
+  function buildChroniqueSession(epId) {
+    const ep = getChroniques().find((x) => x.id === epId) || getChroniques()[0];
+    if (!ep) return [];
+    const steps = [{
+      k: "intro",
+      title: ep.title,
+      place: `${ep.icon} ${ep.place} · ${ep.cefr}`,
+      goal: `${isEnGuide() ? ep.subEn : ep.subFr} (5 scènes vivantes : Écouter · Lire · Écrire · Parler)`
+    }];
+    (ep.scenes || []).forEach((sc) => {
+      const copy = JSON.parse(JSON.stringify(sc));
+      if (copy.k === "dialogue" && Array.isArray(copy.options)) copy.options = shuffle(copy.options);
+      if ((copy.k === "listen" || copy.k === "mcq") && Array.isArray(copy.choices)) copy.choices = shuffle(copy.choices);
+      steps.push(copy);
+    });
+    return steps;
+  }
+
+  function chroniquesStripHtml() {
+    const eps = getChroniques();
+    if (!eps.length) return "";
+    const c = CH();
+    const done = c.chroniquesDone || {};
+    const en = isEnGuide();
+    const doneCount = eps.filter((e) => done[e.id]).length;
+    const cardsHtml = eps.map((ep) => {
+      const isDone = !!done[ep.id];
+      return `<button type="button" class="chr-card ${isDone ? "done" : ""}" data-a2="playchronique" data-ep="${esc(ep.id)}" title="${esc(en ? ep.subEn : ep.subFr)}">
+        <div class="chr-top">
+          <span class="chr-cefr">${esc(ep.cefr)}</span>
+          <span class="chr-ic">${ep.icon}</span>
+          <span class="chr-state">${isDone ? "✅" : "▶"}</span>
+        </div>
+        <div class="chr-title">${esc(ep.title.replace(/^Épisode \d+ · /, ""))}</div>
+        <div class="chr-meta">${esc(ep.friendName)} · 5 scènes</div>
+      </button>`;
+    }).join("");
+    return `<section class="ody-chroniques-strip" id="ody-chroniques-strip" aria-label="Les Chroniques de Paris">
+      <div class="chr-head">
+        <div>
+          <span class="chr-badge">🎬 ${en ? "STORY CAMPAIGN · A1 → C2" : "CAMPAGNE NARRATIVE · A1 → C2"}</span>
+          <h3>Les Chroniques de Paris <small>(${doneCount}/${eps.length} ${en ? "episodes lived" : "épisodes vécus"})</small></h3>
+        </div>
+        <button type="button" class="ody-btn ghost tiny" data-a2="chroniques">${en ? "All 6 Episodes" : "Voir les 6 Épisodes"} ▸</button>
+      </div>
+      <div class="chr-grid">${cardsHtml}</div>
+    </section>`;
+  }
+
+  function openChroniquesSheet() {
+    closeSheet(); closeDrawer();
+    const eps = getChroniques();
+    const done = CH().chroniquesDone || {};
+    const en = isEnGuide();
+    const listHtml = eps.map((ep) => {
+      const isDone = !!done[ep.id];
+      return `<div class="chr-sheet-card ${isDone ? "done" : ""}">
+        <div class="chr-sheet-left">
+          <div class="chr-sheet-k"><span class="chr-cefr">${esc(ep.cefr)}</span> ${ep.icon} ${esc(ep.place)} · ❤️ ${esc(ep.friendName)}</div>
+          <div class="chr-sheet-t">${esc(ep.title)} ${isDone ? "✅" : ""}</div>
+          <div class="chr-sheet-sub">${esc(en ? ep.subEn : ep.subFr)}</div>
+          <div class="chr-sheet-pills"><span>🎧 Écouter (⚡ 1.25x)</span><span>📰 Lire</span><span>✍️ Écrire (AZERTY)</span><span>🎙️ Parler</span></div>
+        </div>
+        <button type="button" class="ody-btn ${isDone ? "ghost" : "primary"} small" data-a2="playchronique" data-ep="${esc(ep.id)}">${isDone ? "🔁 Rejouer" : "▶ Vivre l'Épisode"}</button>
+      </div>`;
+    }).join("");
+    const d = document.createElement("div"); d.className = "ody-sheet-wrap"; d.id = "ody-sheet";
+    d.innerHTML = `<div class="ody-sheet wide-sheet">
+      <div class="ody-row between">
+        <div>
+          <div class="ody-kind">🎬 LES CHRONIQUES DE PARIS · 6 ÉPISODES · 30 SCÈNES VIVANTES</div>
+          <h3>Vivez votre histoire parisienne du zéro (A1) à la fluidité native (C2)</h3>
+          <div class="ody-mini">Chaque épisode tisse Écoute, Lecture, Écriture et Oral dans une vraie scène de Paris — +25 ⚜️ Réputation &amp; +20 ❤️ Lien !</div>
+        </div>
+        <button class="ody-btn ghost small" data-a2="closesheet">✕ Fermer</button>
+      </div>
+      <div class="chr-sheet-list">${listHtml}</div>
+    </div>`;
+    document.body.appendChild(d);
+    d.addEventListener("click", (e) => { if (e.target === d) closeSheet(); });
+  }
+
   function quatuorAndPathBarHtml() {
     const c = CH();
     const sk = c.skills || {};
@@ -7018,7 +7123,7 @@
     return `<section class="ody-quatuor-deck" aria-label="Les 4 Piliers Natifs & Sélecteur de Parcours">
       <div class="ody-voie-bar">
         <div class="voie-left">
-          <img src="assets/pixel_voie_royale.png?v=25.0" class="voie-crest" alt="👑">
+          <img src="assets/pixel_voie_royale.png?v=26.0" class="voie-crest" alt="👑">
           <div class="voie-txt">
             <span class="voie-kicker">${en ? "🧭 LEARNING PACE · NEVER GET STUCK BETWEEN LEVELS" : "🧭 RYTHME D'AVANCEMENT · ZÉRO ENLISEMENT ENTRE LES NIVEAUX"}</span>
             <b>${isRoyal ? (en ? `👑 Royal Fast-Track Active (${royalTotal} core milestones A1→C2 · ~12/level)` : `👑 Voie Royale Active (${royalTotal} étapes clés A1→C2 · ~12 par niveau)`) : (en ? `📚 Complete Archive Active (${integralTotal} full stages · 62 Worlds)` : `📚 Parcours Intégral Actif (${integralTotal} étapes complètes · 62 Mondes)`)}</b>
@@ -7031,7 +7136,7 @@
         </div>
       </div>
       <div class="quatuor-head">
-        <img src="assets/pixel_quatuor.png?v=25.0" class="quatuor-crest" alt="4 Piliers">
+        <img src="assets/pixel_quatuor.png?v=26.0" class="quatuor-crest" alt="4 Piliers">
         <div>
           <span class="quatuor-kicker">${en ? `🎯 THE 4 NATIVE FRENCH PILLARS · ACTIVE TRAINING (${lv})` : `🎯 LES 4 PILIERS DU FRANÇAIS NATIF · ENTRAÎNEMENT ACTIF (${lv})`}</span>
           <h4>${en ? "Read · Listen · Write · Speak like a real native (90s active reps — no passive MCQ)" : "Lire · Écouter · Écrire · Parler comme un vrai Français (Reps de 90s sans QCM passif)"}</h4>
@@ -7130,6 +7235,7 @@
           </div>
         </section>
         ${parisDispatchHtml(activeNode, mpActive)}
+        ${chroniquesStripHtml()}
         ${quatuorAndPathBarHtml()}
         ${parisMapStripHtml()}
         <div class="ody-neuro-bar">
@@ -7409,6 +7515,28 @@
     document.body.appendChild(d);
     d.addEventListener("click", (e) => { if (e.target === d) closeSheet(); });
   }
+  function computeNativeUpgrade(msg, friendId) {
+    const raw = String(msg || "").trim();
+    if (!raw) return null;
+    const low = raw.toLowerCase();
+    const isFormal = friendId === "valcourt" || friendId === "celeste";
+    const rules = [
+      { re: /\b(c['’]est\s+tr[eè]s\s+bien|tr[eè]s\s+bien)\b/i, nativeFr: isFormal ? "C'est tout à fait remarquable." : "C'est nickel, franchement ça gère !", noteEn: "Sound like a real Parisian instead of textbook 'très bien'." },
+      { re: /\bje\s+veux\b/i, nativeFr: isFormal ? "Je souhaiterais volontiers…" : "J'ai trop envie de… / Je voudrais bien…", noteEn: "'Je veux' sounds abrupt in Paris; soften it for instant native polish." },
+      { re: /\bje\s+suis\s+content/i, nativeFr: isFormal ? "Je m'en réjouis vivement." : "Je suis trop content / ravi !", noteEn: "Natural Parisian warmth & precision." },
+      { re: /\bmerci\s+beaucoup\b/i, nativeFr: isFormal ? "Je vous remercie infiniment." : "Merci mille fois, c'est trop sympa !", noteEn: "Elevate your gratitude beyond textbook 'merci beaucoup'." },
+      { re: /\bje\s+pense\s+que\b/i, nativeFr: isFormal ? "Il me semble que… / À mon sens…" : "Franchement, je trouve que…", noteEn: "Native Parisian opinion openers." },
+      { re: /\bje\s+ne\s+sais\s+pas\b/i, nativeFr: isFormal ? "Je ne saurais vous le dire avec certitude." : "Aucune idée / J'en sais trop rien !", noteEn: "Spoken Parisian rhythm vs. literary elegance." },
+      { re: /\bbeaucoup\s+de\b/i, nativeFr: isFormal ? "Une multitude de / Bon nombre de…" : "Plein de… / Pas mal de…", noteEn: "Parisians almost always say 'plein de' or 'pas mal de' in speech." },
+      { re: /\btr[eè]s\s+bon/i, nativeFr: isFormal ? "C'est absolument exquis." : "C'est une tuerie / C'est délicieux !", noteEn: "Parisian food & café enthusiasm." }
+    ];
+    for (const r of rules) {
+      if (r.re.test(low)) return { nativeFr: r.nativeFr, noteEn: r.noteEn };
+    }
+    return isFormal
+      ? { nativeFr: "En effet, il me semble tout à fait pertinent d'aborder la question ainsi.", noteEn: "C1/C2 Parisian salon phrasing to elevate your reply." }
+      : { nativeFr: "Franchement, carrément ! On fait comme ça !", noteEn: "Everyday Parisian connector ('Franchement, carrément !')." };
+  }
   const AMIS_STATE = { friendId: "camille", history: {}, busy: false };
   function openAmisSheet(friendId) {
     closeSheet(); closeDrawer();
@@ -7423,6 +7551,8 @@
       }];
     }
     const hist = AMIS_STATE.history[frObj.id];
+    const activePts = (CH().bonds && CH().bonds[frObj.id]) || 0;
+    const activeBond = bondLevelInfo(activePts);
     const tabsHtml = AMIS_DE_PARIS.map((f) => {
       const b = bondLevelInfo((CH().bonds && CH().bonds[f.id]) || 0);
       return `<button type="button" class="amis-tab ${f.id === frObj.id ? "active" : ""}" data-a2="amis" data-fid="${f.id}">
@@ -7435,7 +7565,10 @@
         return `<div class="amis-msg user"><div class="amis-bub user-bub"><b>Vous :</b> « ${esc(m.fr)} »</div></div>`;
       }
       const corrHtml = (m.correction && m.correction.has_error && m.correction.corrected_fr)
-        ? `<div class="amis-corr">✨ <b>Tournure naturelle :</b> <span class="fr-tap" data-a="say" data-t="${esc(m.correction.corrected_fr)}">« ${esc(m.correction.corrected_fr)} » 🔊</span> <small>(${esc(m.correction.explanation_en || "")})</small></div>`
+        ? `<div class="amis-corr">✨ <b>Correction :</b> <span class="fr-tap" data-a="say" data-t="${esc(m.correction.corrected_fr)}">« ${esc(m.correction.corrected_fr)} » 🔊</span> <small>(${esc(m.correction.explanation_en || "")})</small></div>`
+        : "";
+      const nativeHtml = (m.nativeUpgrade && m.nativeUpgrade.nativeFr)
+        ? `<div class="amis-native-up">✨ <b>Upgrade Natif (Parler comme un vrai Parisien) :</b> <button type="button" class="fr-tap-btn" data-a="say" data-t="${esc(m.nativeUpgrade.nativeFr)}">« ${esc(m.nativeUpgrade.nativeFr)} » 🔊</button> <button type="button" class="ody-btn tiny ghost" data-a="say" data-t="${esc(m.nativeUpgrade.nativeFr)}" data-r="1.25" title="Vitesse Parisienne 1.25x">⚡ 1.25x</button><div class="an-note">${esc(m.nativeUpgrade.noteEn || "")}</div></div>`
         : "";
       const nwHtml = (m.words && m.words.length)
         ? `<div class="amis-words">${m.words.map((w) => `<span class="amis-w-pill" data-a="say" data-t="${esc(w.fr)}">💎 <b>${esc(w.fr)}</b> : ${esc(w.en)} 🔊</span>`).join("")}</div>`
@@ -7443,10 +7576,16 @@
       return `<div class="amis-msg npc">
         <img src="${frObj.img}" class="amis-npc-img" alt="${esc(frObj.name)}" onerror="this.style.display='none'">
         <div class="amis-bub npc-bub">
-          <div class="amis-bub-top"><b>${frObj.avatar} ${esc(frObj.name)}</b> · <small>${esc(frObj.place)}</small> <button type="button" class="ody-btn tiny ghost" data-a="say" data-t="${esc(m.fr)}">🔊 Écouter</button></div>
+          <div class="amis-bub-top"><b>${frObj.avatar} ${esc(frObj.name)}</b> · <small>${esc(frObj.place)}</small></div>
+          <div class="amis-voice-bar">
+            <button type="button" class="avb-play" data-a="say" data-t="${esc(m.fr)}" title="Écouter la note vocale (1.0x)">▶ 🔊 Note vocale</button>
+            <span class="avb-wave" aria-hidden="true">▁▃▆█▅▇▃▅▂▆█▄▂</span>
+            <button type="button" class="avb-fast" data-a="say" data-t="${esc(m.fr)}" data-r="1.25" title="Vitesse Parisienne 1.25x">⚡ 1.25x</button>
+          </div>
           <div class="amis-fr">« ${esc(m.fr)} »</div>
           ${m.en ? `<div class="amis-en">${esc(m.en)}</div>` : ""}
           ${corrHtml}
+          ${nativeHtml}
           ${nwHtml}
         </div>
       </div>`;
@@ -7462,9 +7601,12 @@
     d.innerHTML = `<div class="ody-sheet wide-sheet amis-sheet">
       <div class="ody-row between">
         <div>
-          <div class="ody-kind">🥂 LE CERCLE DES AMIS PARISIENS · ZÉRO SOLITUDE · 100% IMMERSION</div>
-          <h3>Vos 4 Amis Français à Paris — Parlez ou Écrivez sans Pression</h3>
-          <div class="ody-mini">${esc(frObj.vibe)} Chaque échange vous rapporte <b>+15 XP</b> et <b>+5 ⚜️ Réputation</b> !</div>
+          <div class="ody-kind">📱 LE TÉLÉPHONE DE PARIS · NOTES VOCALES &amp; UPGRADE NATIF</div>
+          <h3>${frObj.avatar} ${esc(frObj.name)} · <span class="amis-bond-head">❤️ Lv.${activeBond.lv} ${esc(activeBond.label)}</span></h3>
+          <div class="amis-bond-bar-wrap" id="amis-bond-bar">
+            <div class="amis-bond-track"><b style="width:${activeBond.pct}%"></b></div>
+            <small>${activePts} / ${activeBond.next} pts · Chaque message = +15 XP, +15 ❤️ Lien &amp; +5 ⚜️</small>
+          </div>
         </div>
         <button class="ody-btn ghost small" data-a2="closesheet">✕ Fermer</button>
       </div>
@@ -7562,6 +7704,7 @@
       fr: replyData.reply_fr,
       en: replyData.reply_en || "",
       correction: replyData.correction || null,
+      nativeUpgrade: computeNativeUpgrade(msg, frObj.id),
       suggestions: replyData.suggestions_fr || [],
       words: replyData.new_words || []
     });
@@ -7615,6 +7758,17 @@
   }
   const HOME_ACT = {
     go(el) { go(el.dataset.id); },
+    chroniques() { openChroniquesSheet(); },
+    playchronique(el) {
+      const epId = (el && el.dataset && el.dataset.ep) || "ep1_flore";
+      closeSheet(); closeDrawer();
+      const steps = buildChroniqueSession(epId);
+      if (!steps.length) return toast("Chroniques indisponibles", "", "🎬");
+      const modeKey = "chronique_" + epId;
+      const c = CH();
+      if (c.partial) delete c.partial["__mode:" + modeKey];
+      startSession(null, steps, modeKey);
+    },
     microcap(el) { startMicroCapsule(el.dataset.id, el.dataset.cap); },
     pathmode(el) {
       const m = el.dataset.m === "integral" ? "integral" : "royal";
@@ -8009,8 +8163,9 @@
     const rv = reviewCards().length;
     const lvl = currentLevel();
     bar.innerHTML = `
-      <button class="ob-home" data-a2="home" title="Your path"><img src="assets/odyssee_icon.png?v=25.0" class="ob-pixel-icon" alt=""> <span>L'Odyssée</span></button>
+      <button class="ob-home" data-a2="home" title="Your path"><img src="assets/odyssee_icon.png?v=26.0" class="ob-pixel-icon" alt=""> <span>L'Odyssée</span></button>
       <span class="ob-lvl" title="Current level">${lvl === "NATIF" ? "👑" : lvl}</span>
+      <button class="ob-stat btn ob-nav-pill ob-chr-pill" data-a2="chroniques" title="Les Chroniques de Paris · 6 Épisodes Narratifs A1→C2">🎬 Chroniques</button>
       <button class="ob-stat btn ob-nav-pill ob-quick-pill" data-a2="quick60" title="Capsule Express 60s · 4 micro-actions & Coffre de Dopamine">⚡ Express 60s</button>
       <button class="ob-stat btn ob-nav-pill" data-a2="amerun" title="L'Âme Française & Pensée Directe (A1→C2) · 36 réflexes natifs sans traduire">🇫🇷 Âme &amp; Pensée</button>
       <button class="ob-stat btn ob-nav-pill" data-a2="amis" title="Mes 4 Amis Parisiens (Camille, Yanis, Céleste, Valcourt) · Zéro Solitude">🥂 Mes Amis</button>
@@ -8038,7 +8193,8 @@
     const d = document.createElement("div"); d.id = "ody-drawer"; d.className = "ody-drawer-wrap";
     const tile = (sc, ic, t, sub) => `<button class="ody-tile-m" data-a2="scene" data-s="${sc}"><span class="ic">${ic}</span><b>${t}</b><small>${sub}</small></button>`;
     d.innerHTML = `<div class="ody-drawer">
-      <div class="ody-row between"><h3><img src="assets/odyssee_icon.png?v=25.0" class="ob-pixel-icon" alt=""> Menu · L'Odyssée v25.0</h3><button class="ody-btn ghost small" data-a2="closedrawer">✕</button></div>
+      <div class="ody-row between"><h3><img src="assets/odyssee_icon.png?v=26.0" class="ob-pixel-icon" alt=""> Menu · L'Odyssée v26.0</h3><button class="ody-btn ghost small" data-a2="closedrawer">✕</button></div>
+      <button class="ody-tile-m wide" data-a2="chroniques"><span class="ic">🎬</span><b>Les Chroniques de Paris (A1 → C2)</b><small>6 épisodes narratifs vivants · 30 scènes interactives (Écouter · Lire · Écrire · Parler)</small></button>
       <button class="ody-tile-m wide" data-a2="home"><span class="ic">🧭</span><b>Carte &amp; Odyssée</b><small>62 Mondes, Synergie A1→C2, Micro-Capsules 90s, Quartiers, Ateliers &amp; Examens</small></button>
       <button class="ody-tile-m wide" data-a2="cloudsync"><span class="ic">☁️</span><b>Tablette Redmi Pad 2 Pro 5G &amp; Sync Cloud</b><small>Synchronisation automatique Tablette ↔ PC &amp; Clavier Français Logitech</small></button>
       <button class="ody-tile-m wide" data-a2="atlas"><span class="ic">🗺️</span><b>Atlas de Maîtrise C2</b><small>Les 6 Époques (A1 → C2 → Natif) &amp; 7 Compétences sans limite de temps</small></button>
@@ -8176,7 +8332,7 @@
     }
     if (!inInput && e.key === " " && (st.fr || st.npc)) {
       e.preventDefault();
-      speak(st.fr || st.npc, e.shiftKey ? 0.7 : 1);
+      speak(st.fr || st.npc, e.altKey ? 1.25 : e.shiftKey ? 0.7 : 1);
       return;
     }
     if ((e.altKey && (e.key === "h" || e.key === "H")) && !SES.answered && (st.k === "type" || st.k === "memory") && ACT.letterhint) {
@@ -8219,7 +8375,7 @@
     window.continueJourney = () => go(nextNode().id);
     window.ODY_HOME = renderHome;
     window.speakFrench = (t, r) => speak(t, r);
-    Object.assign(window.ODY, { go, startSession, startMicroCapsule, getMicroCapsules, nodeMicroProgress, buildQuick60Session, buildPillarRepSession, openAmisSheet, sendAmisMessage, AMIS_DE_PARIS, AME_CASES, PENSEE_CASES, buildAmeSteps, buildPenseeSteps, buildAmeSession, openAmeSheet, levelSynergyBarHtml, levelNodes, buildSessionFor, buildExamSession, buildReviewSession, buildPlacementSession, buildBlitzSession, buildShadowSession, buildImprovSession, buildSleuthForgeSession, buildJouteSession, buildJouteSteps, buildIdiomeSession, buildIdiomeSteps, buildSyntheseSteps, buildPeriodeSession, buildPeriodeSteps, buildConcordanceSteps, buildEnqueteSteps, buildLiaisonSteps, buildForgeronSteps, buildWeakSpotSession, buildDistrictSession, buildAtelierSession, openCollectionSheet, openIdiomeSheet, openPeriodeSheet, openPantheonSheet, openCloudSyncSheet, pullFromCloud, pushToCloudNow, mergeExternalSave, isPrivateAuthorized, unlockPrivateGate, renderPrivateLockGate, PRIV_KEY, CLOUD_SYNC, TABLET_PWA_URL, renderHome, renderOdysseyAtlas, renderPlan90, hasPartialProgress, savePartial, state: () => SES, cur, ACT, HOME_ACT, reviewCards, levelOfNode, currentLevel });
+    Object.assign(window.ODY, { go, startSession, startMicroCapsule, getMicroCapsules, nodeMicroProgress, buildQuick60Session, buildPillarRepSession, buildChroniqueSession, openChroniquesSheet, computeNativeUpgrade, openAmisSheet, sendAmisMessage, AMIS_DE_PARIS, AME_CASES, PENSEE_CASES, buildAmeSteps, buildPenseeSteps, buildAmeSession, openAmeSheet, levelSynergyBarHtml, levelNodes, buildSessionFor, buildExamSession, buildReviewSession, buildPlacementSession, buildBlitzSession, buildShadowSession, buildImprovSession, buildSleuthForgeSession, buildJouteSession, buildJouteSteps, buildIdiomeSession, buildIdiomeSteps, buildSyntheseSteps, buildPeriodeSession, buildPeriodeSteps, buildConcordanceSteps, buildEnqueteSteps, buildLiaisonSteps, buildForgeronSteps, buildWeakSpotSession, buildDistrictSession, buildAtelierSession, openCollectionSheet, openIdiomeSheet, openPeriodeSheet, openPantheonSheet, openCloudSyncSheet, pullFromCloud, pushToCloudNow, mergeExternalSave, isPrivateAuthorized, unlockPrivateGate, renderPrivateLockGate, PRIV_KEY, CLOUD_SYNC, TABLET_PWA_URL, renderHome, renderOdysseyAtlas, renderPlan90, hasPartialProgress, savePartial, state: () => SES, cur, ACT, HOME_ACT, reviewCards, levelOfNode, currentLevel });
     document.body.classList.add("ody14");
     if (!isPrivateAuthorized()) {
       renderPrivateLockGate();
