@@ -1,6 +1,6 @@
-// L'Odyssée Française v27.0 — Instant <80ms Tablet Startup & Offline TTS Service Worker
-const CACHE_NAME = "odyssee-francaise-v27.0";
-const DATA_CACHE = "odyssee-data-v27.0";
+// L'Odyssée Française v28.0 — Instant <80ms Tablet Startup & Offline TTS Service Worker
+const CACHE_NAME = "odyssee-shell-v28.0";
+const DATA_CACHE = "odyssee-data-v28.0";
 const TTS_CACHE = "odyssee-tts-v1";
 const MAX_TTS_ENTRIES = 400;
 
@@ -13,6 +13,7 @@ const HEAVY_DATA_FILES = [
   "missions_data.js",
   "chroniques_data.js",
   "visual_scenes.js",
+  "essec_c2_pack.js",
   "paris_c2_systems.js",
   "academie_worlds.js",
   "native_worlds.js",
@@ -31,6 +32,7 @@ const CORE_ASSETS = [
   "./sound_lab.css",
   "./chemin.css",
   "./app.js",
+  "./essec_c2_pack.js",
   "./chemin.js",
   "./tutor.js",
   "./sound_lab.js",

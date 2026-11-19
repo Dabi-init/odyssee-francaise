@@ -713,6 +713,248 @@ window.SOUND_LAB_DATA = {
     }
    ],
    "trap": "Stressing the first syllable as in English and squashing the other vowels to 'uh'. French vowels keep their full sound."
+  },
+  {
+   "id": "ind_dental_tdpk",
+   "accent_detox": true,
+   "title": "Soft Front-Teeth T, D, P, K",
+   "ipa": "[t] [d] [p] [k]",
+   "mouth": "Tap the flat tip of your tongue right behind your upper front teeth — never curl your tongue tip back toward the roof of your mouth! Hold a hand in front of your mouth for «Paris», «tu», «café»: you should feel almost zero puff of air.",
+   "english_hint": "Think of the soft, light 't' and 'd' when you touch the back of your top front teeth (like soft 'त/द'), with zero heavy puff of breath on 'p', 't', or 'k'.",
+   "spellings": [
+    "t",
+    "d",
+    "p",
+    "c / k / qu"
+   ],
+   "examples": [
+    {
+     "fr": "tu parles",
+     "en": "you speak"
+    },
+    {
+     "fr": "deux cafés",
+     "en": "two coffees"
+    },
+    {
+     "fr": "Paris",
+     "en": "Paris"
+    },
+    {
+     "fr": "tout de suite",
+     "en": "right away"
+    },
+    {
+     "fr": "pas de problème",
+     "en": "no problem"
+    },
+    {
+     "fr": "quarante-deux",
+     "en": "forty-two"
+    }
+   ],
+   "trap": "Curling the tongue tip backward for 't' and 'd' (which sounds heavy in French) or blowing a strong puff of air after 'p', 't', and 'k'."
+  },
+  {
+   "id": "ind_uvular_r",
+   "accent_detox": true,
+   "title": "Smooth Throat R (Never Rolled)",
+   "ipa": "[ʁ]",
+   "mouth": "Glue the tip of your tongue gently behind your bottom front teeth and keep it completely still! Let the back of your tongue brush softly near the back of your throat — like a whisper-light sigh or warm gargle, never a tongue-tip tap or roll.",
+   "english_hint": "Keep the front of your tongue asleep at the bottom of your mouth; all the gentle friction happens far in the back, much softer than you think.",
+   "spellings": [
+    "r",
+    "rr",
+    "rh"
+   ],
+   "examples": [
+    {
+     "fr": "bonjour",
+     "en": "hello"
+    },
+    {
+     "fr": "merci beaucoup",
+     "en": "thank you very much"
+    },
+    {
+     "fr": "le RER à Cergy",
+     "en": "the RER train at Cergy"
+    },
+    {
+     "fr": "trois euros",
+     "en": "three euros"
+    },
+    {
+     "fr": "au revoir",
+     "en": "goodbye"
+    },
+    {
+     "fr": "très rapide",
+     "en": "very fast"
+    }
+   ],
+   "trap": "Tapping or rolling the tip of your tongue against the roof of your mouth — French natives notice a rolled tongue-tip 'r' immediately."
+  },
+  {
+   "id": "ind_vw_split",
+   "accent_detox": true,
+   "title": "Crisp V (Bite Lip) vs Round W (Kiss)",
+   "ipa": "[v] / [w]",
+   "mouth": "Give these two sounds totally different shapes! For «v» («vin», «vous», «voir»), gently press your top front teeth right onto your bottom lip and feel a clean buzz. For «ou/oi» («oui», «où», «moi»), push both lips forward into a tight kissing circle — zero teeth!",
+   "english_hint": "Never blend V and W into a soft half-way sound: V = top teeth clearly on lower lip; W = tight round whistle lips.",
+   "spellings": [
+    "v",
+    "w / ou + vowel",
+    "oi"
+   ],
+   "examples": [
+    {
+     "fr": "vous voulez voir",
+     "en": "you want to see"
+    },
+    {
+     "fr": "oui, voilà",
+     "en": "yes, here it is"
+    },
+    {
+     "fr": "le vin rouge",
+     "en": "the red wine"
+    },
+    {
+     "fr": "où vas-tu ?",
+     "en": "where are you going?"
+    },
+    {
+     "fr": "la vie à Paris",
+     "en": "life in Paris"
+    },
+    {
+     "fr": "moi aussi",
+     "en": "me too"
+    }
+   ],
+   "trap": "Letting «vous» sound like 'wous' or «vin» lose its crisp lip-buzz — French listeners rely on the clear teeth-on-lip buzz to tell «vous» apart from «où»."
+  },
+  {
+   "id": "ind_pure_vowels",
+   "accent_detox": true,
+   "title": "Pure Steady Vowels (No Sliding)",
+   "ipa": "[e] [o] [u] [y]",
+   "mouth": "Freeze your lips and jaw from the start of a French vowel until the very end! Say «café» with a crisp, steady 'é' (never 'ca-fay-y'), «beau» with tight round lips that never drift to 'bow-w', and «tout» with steady round lips.",
+   "english_hint": "English vowels slide into a tiny second sound at the end ('ay-ee', 'oh-oo'). Cut off the tail slide — hold one clean, laser-steady musical note!",
+   "spellings": [
+    "é / er / ez",
+    "au / eau / ô",
+    "ou",
+    "u"
+   ],
+   "examples": [
+    {
+     "fr": "le café",
+     "en": "the coffee"
+    },
+    {
+     "fr": "il fait beau",
+     "en": "the weather is nice"
+    },
+    {
+     "fr": "le métro",
+     "en": "the metro"
+    },
+    {
+     "fr": "vous parlez",
+     "en": "you speak"
+    },
+    {
+     "fr": "beaucoup",
+     "en": "a lot"
+    },
+    {
+     "fr": "l'été à Paris",
+     "en": "summer in Paris"
+    }
+   ],
+   "trap": "Letting your jaw drift at the end of «café», «métro», or «eau» — freezing your lips instantly makes your accent sound 10x more French."
+  },
+  {
+   "id": "ind_clean_nasals",
+   "accent_detox": true,
+   "title": "Clean Nasals (Zero Trailing 'n' or 'ng')",
+   "ipa": "[ɑ̃] [ɔ̃] [ɛ̃]",
+   "mouth": "Let air float out of your nose and mouth at the exact same time, and KEEP YOUR TONGUE DOWN the entire time! Never lift your tongue to finish an 'n' or 'ng' at the end of «bon», «pain», or «France».",
+   "english_hint": "Imagine humming gently through an open mouth without ever closing your tongue against the roof of your mouth: «bon» ends on pure open air, NOT 'bon-n' or 'bong'.",
+   "spellings": [
+    "an / am / en / em",
+    "on / om",
+    "in / im / ain / ein / un"
+   ],
+   "examples": [
+    {
+     "fr": "bon matin",
+     "en": "good morning"
+    },
+    {
+     "fr": "un bon croissant",
+     "en": "a good croissant"
+    },
+    {
+     "fr": "en France",
+     "en": "in France"
+    },
+    {
+     "fr": "le train de cinq heures",
+     "en": "the five o'clock train"
+    },
+    {
+     "fr": "un étudiant indien",
+     "en": "an Indian student"
+    },
+    {
+     "fr": "sans aucun doute",
+     "en": "without any doubt"
+    }
+   ],
+   "trap": "Pronouncing a real 'n' or 'ng' at the end of «bon» or «pain» (which makes «bon» sound like «bonne»!)."
+  },
+  {
+   "id": "ind_cadence_liaison",
+   "accent_detox": true,
+   "title": "Smooth French Flow & Linking",
+   "ipa": "‿",
+   "mouth": "Give every syllable an equal, relaxed beat — like stepping evenly across flat stones — and hold just the very last syllable of each short phrase slightly longer. Glue words together smoothly when a silent letter meets a vowel: «les‿amis», «vous‿avez», «un‿étudiant‿indien».",
+   "english_hint": "Avoid bouncing up and down on early syllables like in English. Glide straight across a whole short group in one smooth breath and land gently on the final syllable.",
+   "spellings": [
+    "les‿ / des‿ / mes‿",
+    "vous‿ / nous‿ / ils‿",
+    "un‿ / en‿ / très‿"
+   ],
+   "examples": [
+    {
+     "fr": "les‿amis",
+     "en": "the friends"
+    },
+    {
+     "fr": "vous‿avez raison",
+     "en": "you are right"
+    },
+    {
+     "fr": "un‿étudiant‿indien",
+     "en": "an Indian student"
+    },
+    {
+     "fr": "très‿important",
+     "en": "very important"
+    },
+    {
+     "fr": "on‿y va tout de suite",
+     "en": "let's go right away"
+    },
+    {
+     "fr": "en‿Île-de-France",
+     "en": "in Île-de-France"
+    }
+   ],
+   "trap": "Stopping abruptly between words («les | amis») or stressing the first syllable of long words («IM-por-tant» instead of «im-por-TANT»)."
   }
  ],
  "pairs": [
@@ -1135,6 +1377,132 @@ window.SOUND_LAB_DATA = {
    "a_en": "wood",
    "b_en": "low",
    "sound": "oi"
+  },
+  {
+   "a": "tu",
+   "b": "du",
+   "a_en": "you",
+   "b_en": "some",
+   "sound": "ind_dental_tdpk"
+  },
+  {
+   "a": "temps",
+   "b": "dans",
+   "a_en": "time / weather",
+   "b_en": "in / inside",
+   "sound": "ind_dental_tdpk"
+  },
+  {
+   "a": "pas",
+   "b": "bas",
+   "a_en": "not / step",
+   "b_en": "low",
+   "sound": "ind_dental_tdpk"
+  },
+  {
+   "a": "rue",
+   "b": "lu",
+   "a_en": "street",
+   "b_en": "read (past)",
+   "sound": "ind_uvular_r"
+  },
+  {
+   "a": "Paris",
+   "b": "pali",
+   "a_en": "Paris",
+   "b_en": "turned pale",
+   "sound": "ind_uvular_r"
+  },
+  {
+   "a": "très",
+   "b": "thé",
+   "a_en": "very",
+   "b_en": "tea",
+   "sound": "ind_uvular_r"
+  },
+  {
+   "a": "vous",
+   "b": "où",
+   "a_en": "you (formal/plural)",
+   "b_en": "where",
+   "sound": "ind_vw_split"
+  },
+  {
+   "a": "vin",
+   "b": "oui",
+   "a_en": "wine",
+   "b_en": "yes",
+   "sound": "ind_vw_split"
+  },
+  {
+   "a": "voir",
+   "b": "noir",
+   "a_en": "to see",
+   "b_en": "black",
+   "sound": "ind_vw_split"
+  },
+  {
+   "a": "beau",
+   "b": "bout",
+   "a_en": "beautiful",
+   "b_en": "end / tip",
+   "sound": "ind_pure_vowels"
+  },
+  {
+   "a": "fée",
+   "b": "fait",
+   "a_en": "fairy",
+   "b_en": "fact / done",
+   "sound": "ind_pure_vowels"
+  },
+  {
+   "a": "l'eau",
+   "b": "l'or",
+   "a_en": "water",
+   "b_en": "gold",
+   "sound": "ind_pure_vowels"
+  },
+  {
+   "a": "bon",
+   "b": "bonne",
+   "a_en": "good (masc.)",
+   "b_en": "good (fem.)",
+   "sound": "ind_clean_nasals"
+  },
+  {
+   "a": "pain",
+   "b": "peine",
+   "a_en": "bread",
+   "b_en": "trouble / sorrow",
+   "sound": "ind_clean_nasals"
+  },
+  {
+   "a": "an",
+   "b": "âne",
+   "a_en": "year",
+   "b_en": "donkey",
+   "sound": "ind_clean_nasals"
+  },
+  {
+   "a": "les amis",
+   "b": "l'ami",
+   "a_en": "the friends",
+   "b_en": "the friend",
+   "sound": "ind_cadence_liaison"
+  },
+  {
+   "a": "ils ont",
+   "b": "ils sont",
+   "a_en": "they have",
+   "b_en": "they are",
+   "sound": "ind_cadence_liaison"
+  },
+  {
+   "a": "vous avez",
+   "b": "vous savez",
+   "a_en": "you have",
+   "b_en": "you know",
+   "sound": "ind_cadence_liaison"
   }
  ],
  "bootcamp": [

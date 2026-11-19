@@ -20,6 +20,7 @@
   const WRITINGS = () => window.WRITING_MISSIONS || [];
   const C2_RUBRIC = () => window.C2_RUBRIC_MARKERS || { metrics: [], registerUpgrades: [] };
   const RADIO = () => window.RADIO_SHOWS || [];
+  const ESSEC_PACK = () => window.ESSEC_C2_PACK || { scenarios: [], dossiers: [], debates: [] };
   const API = () => window.RPG_API || {};
   let fallbackSave = {};
   const SAVE = () => (API().save ? API().save() : fallbackSave);
@@ -30,7 +31,7 @@
   const PRIV_STORAGE_KEY = "ODYSSEE_PRIVATE_AUTH_V24";
   const CLOUD_TOPIC = "odyssee_srt_priv24_8e3f9a1c7b2d4065e9a2c4f8";
   const CLOUD_GIST_ID = "6828a599232d8fea3069b7b45a4b14dd";
-  const TABLET_PWA_URL = "https://dabi-init.github.io/odyssee-francaise/?k=srt_ody24_7f9a3e1c8b4d2065a9e4&v=27.0";
+  const TABLET_PWA_URL = "https://dabi-init.github.io/odyssee-francaise/?k=srt_ody24_7f9a3e1c8b4d2065a9e4&v=28.0";
   const CLOUD_SYNC = {
     hydrated: false,
     syncing: false,
@@ -479,6 +480,30 @@
         c.sealsClaimed = c.sealsClaimed || {};
         Object.keys(ec.sealsClaimed).forEach((k) => { if (!c.sealsClaimed[k] && ec.sealsClaimed[k]) { c.sealsClaimed[k] = ec.sealsClaimed[k]; changed = true; } });
       }
+      if (ec.voicePending && typeof ec.voicePending === "object") {
+        c.voicePending = c.voicePending || {};
+        Object.keys(ec.voicePending).forEach((k) => {
+          if (ec.voicePending[k] && !(k in c.voicePending)) { c.voicePending[k] = true; changed = true; }
+        });
+      }
+      if (ec.c2Readiness && typeof ec.c2Readiness === "object") {
+        c.c2Readiness = c.c2Readiness || {};
+        Object.keys(ec.c2Readiness).forEach((k) => {
+          const ev = ec.c2Readiness[k], cv = c.c2Readiness[k];
+          if (ev && typeof ev === "object") {
+            if (!cv || (ev.passed && !cv.passed) || ((ev.score || 0) > (cv.score || 0))) { c.c2Readiness[k] = ev; changed = true; }
+          } else if (ev && !cv) { c.c2Readiness[k] = ev; changed = true; }
+        });
+      }
+      if (ec.dossierDrafts && typeof ec.dossierDrafts === "object") {
+        c.dossierDrafts = c.dossierDrafts || {};
+        Object.keys(ec.dossierDrafts).forEach((k) => {
+          const ed = ec.dossierDrafts[k], cd = c.dossierDrafts[k];
+          if (ed && (!cd || (ed.savedAt || 0) > (cd.savedAt || 0))) { c.dossierDrafts[k] = ed; changed = true; }
+        });
+      }
+      if (ec.langMode && !c.langMode) { c.langMode = ec.langMode; changed = true; }
+      if (ec.uiLang && !c.uiLang) { c.uiLang = ec.uiLang; changed = true; }
       if (ec.equippedTitle && !c.equippedTitle) { c.equippedTitle = ec.equippedTitle; changed = true; }
       if (ec.name && !c.name) { c.name = ec.name; changed = true; }
       if (ec.onboarded && !c.onboarded) { c.onboarded = true; changed = true; }
@@ -795,23 +820,100 @@
     return URL.createObjectURL(new Blob(chunks, { type: rec.mimeType || "audio/webm" }));
   }
 
-  // =================================================================== SERVER
-  const SRV = { checked: false, ai: false, up: false };
+  // =================================================================== SERVER & TABLET PWA AI PARITY (BYOK / LAN)
+  const BYOK_KEY_STORE = "ODYSSEE_GEMINI_KEY";
+  const LAN_URL_STORE = "ODYSSEE_LAN_URL";
+  const getByokKey = () => { try { return (localStorage.getItem(BYOK_KEY_STORE) || "").trim(); } catch (e) { return ""; } };
+  const getLanUrl = () => { try { return (localStorage.getItem(LAN_URL_STORE) || "").trim().replace(/\/+$/, ""); } catch (e) { return ""; } };
+  const setByokKey = (v) => { try { const k = String(v || "").trim(); if (k) localStorage.setItem(BYOK_KEY_STORE, k); else localStorage.removeItem(BYOK_KEY_STORE); } catch (e) {} };
+  const setLanUrl = (v) => { try { const u = String(v || "").trim().replace(/\/+$/, ""); if (u) localStorage.setItem(LAN_URL_STORE, u); else localStorage.removeItem(LAN_URL_STORE); } catch (e) {} };
+  const isLocalActive = () => (window.__odyForceNonLocal ? false : IS_LOCAL_SERVER);
+  const SRV = { checked: false, ai: false, up: false, mode: "offline" };
   async function checkServer() {
-    if (!SERVED || !IS_LOCAL_SERVER) { SRV.checked = true; SRV.up = SERVED; SRV.ai = false; return SRV; }
-    try { const r = await fetch("/api/status", { cache: "no-store" }); const j = await r.json(); SRV.up = !!j.server; SRV.ai = !!j.ai; } catch (e) { SRV.up = false; SRV.ai = false; }
-    SRV.checked = true; return SRV;
+    if (SERVED && isLocalActive()) {
+      try {
+        const r = await fetch("/api/status", { cache: "no-store" });
+        const j = await r.json();
+        SRV.up = !!j.server;
+        SRV.ai = !!j.ai || !!getByokKey() || !!getLanUrl();
+        SRV.mode = j.ai ? "local" : (getLanUrl() ? "lan" : (getByokKey() ? "byok" : "offline"));
+        SRV.checked = true;
+        return SRV;
+      } catch (e) { SRV.up = false; }
+    }
+    const lan = getLanUrl();
+    const byok = getByokKey();
+    SRV.up = SERVED || !!lan;
+    SRV.ai = !!(lan || byok);
+    SRV.mode = lan ? "lan" : (byok ? "byok" : "offline");
+    SRV.checked = true;
+    return SRV;
   }
-  async function aiGrade(payload) {
-    if (!SERVED || !IS_LOCAL_SERVER) return { ok: false, error: "OFFLINE" };
+  async function callDirectGemini(route, payload, apiKey, signal) {
+    const model = "gemini-2.5-flash";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    let sysText = "";
+    let userParts = [];
+    if (route === "/api/grade") {
+      const kind = payload.kind === "speak" ? "spoken French answer" : "written French text";
+      const lv = payload.level || "B1";
+      const isC2 = /^C[12]/i.test(String(lv)) || payload.rubric === "dalf_c2";
+      sysText = `You are a demanding, warm official DELF/DALF French examiner. Grade the learner's ${kind} for target level ${lv}. Score strictly 0-100 (gibberish/English/repetition MUST score <20). Return ONLY JSON with keys: score (0-100), cefr, verdict_en, strengths (string[]), errors ({wrong,right,why}[]), improved_fr, native_upgrades ({plain,native,why}[]), criteria ({criterion,met}[]), pronunciation_notes (string[])${isC2 ? ", rubric_50 ({respect_consigne,capacite_traiter,coherence_cohesion,lexique,morphosyntaxe,total_50})" : ""}.`;
+      userParts.push({ text: `TASK: ${String(payload.prompt || "").slice(0, 2000)}\nCRITERIA: ${JSON.stringify(payload.criteria || [])}\nLEARNER TEXT:\n${String(payload.text || "").slice(0, 12000)}` });
+      if (payload.audioBase64) {
+        userParts.push({ inlineData: { mimeType: payload.audioMime || "audio/webm", data: payload.audioBase64 } });
+      }
+    } else {
+      sysText = String(payload.system || "You are a warm native French conversation partner. Return ONLY JSON with keys: reply_fr, reply_en, correction ({has_error,corrected_fr,explanation_en}), suggestions_fr (string[]), new_words ({fr,en}[]).");
+      userParts.push({ text: String(payload.conversation || "").slice(0, 16000) });
+      if (payload.audioBase64) {
+        userParts.push({ inlineData: { mimeType: payload.audioMime || "audio/webm", data: payload.audioBase64 } });
+      }
+    }
+    const body = {
+      systemInstruction: { parts: [{ text: sysText }] },
+      contents: [{ role: "user", parts: userParts }],
+      generationConfig: { responseMimeType: "application/json", maxOutputTokens: 3000 }
+    };
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+    const j = await r.json();
+    const txt = (j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts || []).map((p) => p.text || "").join("");
+    if (!txt) return { ok: false, error: (j && j.error && j.error.message) || "EMPTY_GEMINI" };
+    return { ok: true, data: JSON.parse(txt), via: "byok" };
+  }
+  async function callAI(route, payload) {
     const ctl = window.AbortController ? new AbortController() : null;
     const timer = setTimeout(() => ctl && ctl.abort(), 70000);
+    const sig = ctl ? ctl.signal : undefined;
     try {
-      const r = await fetch("/api/grade", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: ctl ? ctl.signal : undefined });
-      return await r.json();
-    } catch (e) { return { ok: false, error: "NETWORK" }; }
-    finally { clearTimeout(timer); }
+      if (SERVED && isLocalActive()) {
+        try {
+          const r = await fetch(route, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload || {}), signal: sig });
+          const j = await r.json();
+          if (j && j.ok) return j;
+        } catch (e) {}
+      }
+      const lan = getLanUrl();
+      if (lan) {
+        try {
+          const r = await fetch(lan + route, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload || {}), signal: sig });
+          const j = await r.json();
+          if (j && j.ok) return Object.assign({ via: "lan" }, j);
+        } catch (e) {}
+      }
+      const byok = getByokKey();
+      if (byok) {
+        return await callDirectGemini(route, payload || {}, byok, sig);
+      }
+      return { ok: false, error: "OFFLINE" };
+    } catch (e) {
+      return { ok: false, error: "NETWORK" };
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  window.ODY_CALL_AI = callAI;
+  async function aiGrade(payload) { return callAI("/api/grade", payload); }
 
   // =================================================================== STATE
   function hasPartialProgress(part) {
@@ -826,6 +928,12 @@
     }
     return false;
   }
+  function isStaleMarathonPartial(node, part) {
+    if (!node || !part) return false;
+    if (node.kind === "gate" || node.kind === "natif" || node.kind === "boss" || node.kind === "dossier" || node.kind === "jury" || node.kind === "radio") return false;
+    const len = Array.isArray(part.steps) && part.steps.length ? part.steps.length : (part.stepCount || 0);
+    return len > 10 && !part.microCap;
+  }
   function CH() {
     const s = SAVE();
     if (!s.chemin || typeof s.chemin !== "object") s.chemin = {};
@@ -834,7 +942,11 @@
     c.partial = c.partial || {};
     c.inspected = c.inspected || {};
     c.microDone = c.microDone || {};
+    c.voicePending = c.voicePending || {};
+    c.c2Readiness = c.c2Readiness || {};
+    c.dossierDrafts = c.dossierDrafts || {};
     c.pathMode = c.pathMode || "royal";
+    c.langMode = c.langMode || "auto";
     c.unlockedLevels = c.unlockedLevels || {};
     c.unlockedNodes = c.unlockedNodes || {};
     if (c.capsulesCleared == null) c.capsulesCleared = 0;
@@ -849,7 +961,59 @@
     if (c.autoAudio == null) c.autoAudio = true;
     if (!c.name) c.name = "Sreenath";
     if (c.onboarded == null) c.onboarded = true;
+    // Seed levelSkills once from legacy skills if completely empty so all trackers stay consistent
+    if ((!c.levelSkills || !Object.keys(c.levelSkills).length) && Object.keys(c.skills).length) {
+      c.levelSkills = { A1: JSON.parse(JSON.stringify(c.skills)) };
+    }
     return c;
+  }
+  function skillMasteryPct(stat, targetReps = 25) {
+    if (!stat || !stat.n) return 0;
+    const acc = typeof stat.ema === "number" ? stat.ema : ((stat.ok || 0) + 0.5) / ((stat.n || 0) + 1);
+    const vol = Math.min(1, (stat.n || 0) / Math.max(1, targetReps));
+    return Math.round(clamp(acc * vol * 100, 0, 100));
+  }
+  const FR_FUNC_TOKENS = new Set("je j tu il elle on nous vous ils elles le la les l un une des de du d au aux et ou mais donc or ni car que qu qui dont où dans pour avec sur sous sans chez vers par en y ne n pas plus très tout tous toute toutes ce cet cette ces mon ma mes ton ta tes son sa ses notre nos votre vos leur leurs est sont être avoir suis es sommes êtes ai as avons avez ont fait faire peut peux pouvons peuvent doit dois doivent veut veux veulent comme parce alors ainsi cependant toutefois néanmoins pourtant malgré bien afin".split(" "));
+  const EN_STOP_TOKENS = new Set("the and is are was were have has had with that this from they them their would could should because about which there been into very just really think people government society work today important many more than also will can not you your we our".split(" "));
+  const FR_VERB_RE = /\b(suis|es|est|sommes|êtes|sont|ai|as|avons|avez|ont|vais|vas|va|allons|allez|vont|fais|fait|faisons|faites|font|peux|peut|pouvons|peuvent|dois|doit|devons|doivent|veux|veut|voulons|veulent|serait|faudrait|convient|permet|semble|reste|devient|montre|prouve|explique|souligne|affirme|oppose|propose|voudrais|aimerais|pense|crois|trouve|vois|sais|dis|dit|[a-zà-ÿ]+(?:ons|ez|ent|ais|ait|aient|erai|era|eront|isse|issent))\b/i;
+  function evaluateFrenchLocal(text, opts = {}) {
+    const raw = String(text || "").trim();
+    const toks = normLoose(raw).split(" ").filter(Boolean);
+    const n = toks.length;
+    const minWords = opts.minWords || 20;
+    if (n < 4) return { score: 0, passed: false, gibberish: true, reason: "Too short — write complete French sentences.", frRatio: 0, ttr: 0 };
+    const freq = {};
+    toks.forEach((w) => { freq[w] = (freq[w] || 0) + 1; });
+    const unique = Object.keys(freq).length;
+    const ttr = unique / n;
+    const maxFreqRatio = Math.max(...Object.values(freq)) / n;
+    if (unique < Math.min(5, Math.ceil(n * 0.3)) || (n >= 12 && ttr < 0.28) || (n >= 8 && maxFreqRatio > 0.34)) {
+      return { score: Math.min(14, Math.round(ttr * 40)), passed: false, gibberish: true, reason: "Repetitive or spam text detected. Use varied, authentic French sentences.", frRatio: 0, ttr };
+    }
+    let frHits = 0, enHits = 0;
+    toks.forEach((w) => {
+      if (FR_FUNC_TOKENS.has(w)) frHits += 1;
+      if (EN_STOP_TOKENS.has(w)) enHits += 1;
+    });
+    const accentHits = (raw.match(/[éèêëàâçîïôûùœ]/gi) || []).length;
+    const frScoreTokens = frHits + Math.min(accentHits, Math.ceil(n * 0.25)) * 0.6;
+    const frRatio = frScoreTokens / n;
+    if ((enHits >= 3 && enHits >= frHits) || (n >= 10 && frRatio < 0.14)) {
+      return { score: Math.min(18, Math.round(frRatio * 90)), passed: false, notFrench: true, reason: "Text does not contain enough authentic French structure (or is mostly English).", frRatio, ttr };
+    }
+    const hasVerb = FR_VERB_RE.test(raw);
+    const sentCount = raw.split(/[.!?]+/).filter((s) => words(s).length >= 3).length;
+    if (!hasVerb && n >= 8) {
+      return { score: 22, passed: false, gibberish: true, reason: "Missing conjugated French verbs and full sentence structure.", frRatio, ttr };
+    }
+    const lenRatio = clamp(n / Math.max(1, minWords), 0, 1.05);
+    const kws = opts.keyConcepts || opts.keywords || [];
+    const tLow = " " + normLoose(raw) + " ";
+    const kwHits = kws.length ? kws.filter((k) => tLow.includes(normLoose(k))).length / kws.length : 0.7;
+    const structBonus = (hasVerb ? 14 : 0) + Math.min(14, sentCount * 4) + Math.min(12, Math.round(ttr * 16));
+    const rhetHits = (opts.rhetCount || 0) * 6;
+    const score = clamp(Math.round(lenRatio * 42 + kwHits * 18 + structBonus + Math.min(16, rhetHits)), 0, 94);
+    return { score, passed: score >= 55, gibberish: false, notFrench: false, frRatio, ttr, hasVerb, sentCount };
   }
   const ALL_SKILLS = [
     { k: "listening", ic: "🎧", label: "Compréhension orale (Listening)" },
@@ -1023,34 +1187,51 @@
   const WORLD_BY_NUM = {}; DATA.lessons.forEach((w) => (WORLD_BY_NUM[w.number] = w));
   const NODES = []; const NODE_BY_ID = {}; const UNITS = [];
   const KIND_META = {
-    boot: { icon: "🐣", label: "Sounds" },
-    core: { icon: "🎓", label: "Lesson" },
-    supplementary: { icon: "✨", label: "Vocabulary" },
-    exercise: { icon: "🎧", label: "Dialogue" },
-    boss: { icon: "🐉", label: "Boss" },
-    scene: { icon: "🎭", label: "Role-play" },
-    district: { icon: "🏙️", label: "Quête de Quartier" },
-    atelier: { icon: "✒️", label: "Atelier Rhétorique" },
-    read: { icon: "📰", label: "Reading" },
-    mission: { icon: "✍️", label: "Mission" },
-    gate: { icon: "🏛️", label: "Level exam" },
-    natif: { icon: "👑", label: "Grand Examen Natif" }
+    boot: { icon: "🐣", label: "Premiers sons", enLabel: "First Sounds", mins: "2–3 min" },
+    core: { icon: "🎓", label: "Leçon", enLabel: "Core Bite", mins: "2–3 min" },
+    supplementary: { icon: "✨", label: "Vocabulaire", enLabel: "Vocabulary", mins: "2–3 min" },
+    exercise: { icon: "🎧", label: "Dialogue", enLabel: "Dialogue", mins: "2–3 min" },
+    boss: { icon: "🐉", label: "Boss", enLabel: "Chapter Boss", mins: "3–4 min" },
+    scene: { icon: "🎭", label: "Jeu de rôle", enLabel: "Role-play", mins: "2–3 min" },
+    district: { icon: "🏙️", label: "Quête de Quartier", enLabel: "Paris Quest", mins: "3 min" },
+    atelier: { icon: "✒️", label: "Atelier Rhétorique", enLabel: "Writing Studio", mins: "4–5 min" },
+    read: { icon: "📰", label: "Lecture", enLabel: "Reading", mins: "3 min" },
+    mission: { icon: "✍️", label: "Mission", enLabel: "Active Output", mins: "3–4 min" },
+    explore: { icon: "🗺️", label: "Scène Visuelle", enLabel: "Look & Tap", mins: "2 min" },
+    sound: { icon: "👄", label: "Labo des Sons", enLabel: "Sound Detox", mins: "2 min" },
+    swipe: { icon: "⚡", label: "Réflexe Swipe", enLabel: "Quick Swipe", mins: "2 min" },
+    chronique: { icon: "🎬", label: "Chronique de Paris", enLabel: "Paris Story", mins: "3 min" },
+    radio: { icon: "📻", label: "Radio Native", enLabel: "Real French Audio", mins: "4–6 min" },
+    memory_lock: { icon: "🔒", label: "Verrou Mémoire", enLabel: "Memory Lock", mins: "2–3 min" },
+    essec: { icon: "🏛️", label: "Vie en France · ESSEC", enLabel: "France & ESSEC Life", mins: "3–4 min" },
+    dossier: { icon: "📑", label: "Dossier DALF C2", enLabel: "DALF C2 Dossier (700w)", mins: "15–30 min" },
+    jury: { icon: "⚖️", label: "Jury Oral C2", enLabel: "Live Jury Debate", mins: "8–15 min" },
+    gate: { icon: "🏛️", label: "Examen de Niveau", enLabel: "Level Exam", mins: "6–10 min" },
+    natif: { icon: "👑", label: "Grand Examen Natif", enLabel: "Grand Native Exam", mins: "15 min" }
   };
   function addNode(n) { n.idx = NODES.length; NODES.push(n); NODE_BY_ID[n.id] = n; return n; }
   function buildPath() {
     NODES.length = 0; UNITS.length = 0;
     for (const k in NODE_BY_ID) delete NODE_BY_ID[k];
     const G = GYM();
+    const EP = ESSEC_PACK();
+    const scenesAll = Array.isArray(window.VISUAL_SCENES) ? window.VISUAL_SCENES : [];
+    const chronsAll = Array.isArray(window.CHRONIQUES_DE_PARIS) ? window.CHRONIQUES_DE_PARIS : [];
+    const detoxIdsA1 = ["ind_dental_tdpk", "ind_uvular_r", "ind_vw_split"];
+    const detoxIdsA2 = ["ind_pure_vowels", "ind_clean_nasals", "ind_cadence_liaison"];
+    const findSound = (sid) => ((SLD && SLD.sounds) || []).find((x) => x && x.id === sid) || { id: sid, title: sid.replace(/^ind_/, "").replace(/_/g, " ") };
     // distribute scenes, readings, Parisian district quests & rhetoric ateliers to worlds of the same CEFR level
     const byLevel = {}; WORLDS.forEach((w) => (byLevel[w.cefr] = byLevel[w.cefr] || []).push(w.number));
-    const sceneFor = {}, readFor = {}, distFor = {}, atelFor = {};
+    const sceneFor = {}, readFor = {}, distFor = {}, atelFor = {}, expFor = {}, essecFor = {};
     const distCefrMap = {
       "district_gare_du_nord": "A1",
+      "district_boulangerie_bastille": "A1",
       "district_montmartre_bistrot": "A2",
       "district_marais_galerie": "A2",
       "district_haussmann_immobilier": "B1",
       "district_canal_saint_martin": "B1",
       "district_cabinet_medical": "B2",
+      "district_odeon_debat": "B2",
       "district_la_defense_comex": "C1",
       "district_palais_justice": "C1",
       "district_sorbonne_jury_c2": "C2",
@@ -1075,37 +1256,87 @@
       const sc = (G.scenes || []).filter((s) => s.cefr === lv);
       const rd = (G.readings || []).filter((s) => s.cefr === lv);
       const wm = (WRITINGS() || []).filter((s) => s.cefr === lv);
-      sc.forEach((s, i) => { const w = ws[Math.floor(i * ws.length / Math.max(1, sc.length))]; (sceneFor[w] = sceneFor[w] || []).push(s); });
-      rd.forEach((s, i) => { const w = ws[ws.length - 1 - Math.floor(i * ws.length / Math.max(1, rd.length))]; (readFor[w] = readFor[w] || []).push(s); });
+      const vs = scenesAll.filter((s) => s.cefr === lv && s.id !== "boulangerie");
+      const es = (EP.scenarios || []).filter((s) => s.cefr === lv);
+      sc.forEach((s, i) => { if (ws.length) { const w = ws[Math.floor(i * ws.length / Math.max(1, sc.length))]; (sceneFor[w] = sceneFor[w] || []).push(s); } });
+      rd.forEach((s, i) => { if (ws.length) { const w = ws[ws.length - 1 - Math.floor(i * ws.length / Math.max(1, rd.length))]; (readFor[w] = readFor[w] || []).push(s); } });
       wm.forEach((s, i) => { if (ws.length) { const w = ws[Math.min(ws.length - 1, Math.floor((i + 1) * ws.length / (wm.length + 1)))]; (atelFor[w] = atelFor[w] || []).push(s); } });
+      vs.forEach((s, i) => { if (ws.length) { const w = ws[Math.min(ws.length - 1, Math.floor((i + 1) * ws.length / (vs.length + 1)))]; (expFor[w] = expFor[w] || []).push(s); } });
+      es.forEach((s, i) => { if (ws.length) { const w = ws[Math.min(ws.length - 1, Math.floor((i + 1) * ws.length / (es.length + 1)))]; (essecFor[w] = essecFor[w] || []).push(s); } });
     });
-    // Unit 0: sounds bootcamp
-    if ((SLD.bootcamp || []).length) {
-      const u = { id: "u0", num: 0, title: "Premiers sons", sub: "Hear and say your first French", cefr: "A1", nodes: [] };
-      SLD.bootcamp.forEach((b, i) => u.nodes.push(addNode({ id: "boot:" + b.id, kind: "boot", title: b.title, cefr: "A1", unit: "u0", data: b, n: i + 1 })));
-      UNITS.push(u);
+    // Day-0 Chapter 0: "First Steps in Paris" (6 crisp interleaved bites — zero marathon wall!)
+    {
+      const u0 = { id: "u0", num: 0, title: "Premiers pas à Paris", enTitle: "Chapter 0 · First Steps in Paris", sub: "See, hear & say your first Parisian French", cefr: "A1", nodes: [] };
+      const boul = scenesAll.find((s) => s.id === "boulangerie") || scenesAll[0];
+      if (boul) u0.nodes.push(addNode({ id: "exp:" + boul.id, kind: "explore", title: boul.title, enTitle: "Look & Tap: La Boulangerie", cefr: "A1", unit: "u0", data: boul, royal: true }));
+      const s0 = findSound(detoxIdsA1[0]);
+      u0.nodes.push(addNode({ id: "snd:" + s0.id, kind: "sound", title: s0.title || "French T, D, P & K", enTitle: s0.title || "Soft French T, D, P & K", cefr: "A1", unit: "u0", data: s0, royal: true }));
+      (SLD.bootcamp || []).forEach((b, i) => {
+        u0.nodes.push(addNode({ id: "boot:" + b.id, kind: "boot", title: b.title, cefr: "A1", unit: "u0", data: b, n: i + 1, royal: i < 2 }));
+        if (i === 1) {
+          u0.nodes.push(addNode({ id: "swp:A1_0", kind: "swipe", title: "Réflexe A1 · Le/La & Tu/Vous", enTitle: "Quick Swipe: Le/La & Tu/Vous", cefr: "A1", unit: "u0", data: { lv: "A1" }, royal: true }));
+        }
+      });
+      const ep1 = chronsAll.find((e) => e.cefr === "A1") || chronsAll[0];
+      if (ep1) u0.nodes.push(addNode({ id: "chr:" + ep1.id, kind: "chronique", title: ep1.title, enTitle: "Story: Café de Flore", cefr: "A1", unit: "u0", data: ep1, royal: true }));
+      UNITS.push(u0);
     }
     let prevLevel = null;
-    const pushGate = (lv) => {
+    const pushLevelFinaleAndGate = (lv) => {
+      // Chapter-end Memory Lock (0% MCQ active recall spiral) + level-specific Chronique / Radio / C2 Gauntlet
+      const uEnd = { id: "uend-" + lv, num: null, title: `Étape Clé · ${lv}`, enTitle: `${lv} Milestone & Memory Lock`, cefr: lv, nodes: [] };
+      const epLv = lv !== "A1" ? chronsAll.find((e) => e.cefr === lv) : null;
+      if (epLv) uEnd.nodes.push(addNode({ id: "chr:" + epLv.id, kind: "chronique", title: epLv.title, cefr: lv, unit: uEnd.id, data: epLv, royal: true }));
+      if (lv !== "A1") uEnd.nodes.push(addNode({ id: "swp:" + lv + "_0", kind: "swipe", title: `Arcade Swipe · ${lv}`, enTitle: `Quick Swipe · ${lv}`, cefr: lv, unit: uEnd.id, data: { lv }, royal: true }));
+      if (cefrRank(lv) >= 2) {
+        uEnd.nodes.push(addNode({ id: "rad:" + lv, kind: "radio", title: `Radio Native · ${lv}`, enTitle: `Real French Audio (${lv})`, cefr: lv, unit: uEnd.id, data: { lv }, royal: true }));
+      }
+      uEnd.nodes.push(addNode({ id: "mlock:" + lv, kind: "memory_lock", title: `Verrou Mémoire · ${lv}`, enTitle: `Memory Lock · ${lv} Recall`, cefr: lv, unit: uEnd.id, data: { lv }, royal: true }));
+      if (lv === "C2") {
+        (EP.dossiers || []).forEach((dos, idx) => {
+          uEnd.nodes.push(addNode({ id: "dos:" + dos.id, kind: "dossier", title: dos.title, enTitle: dos.enTitle || dos.title, cefr: "C2", unit: uEnd.id, data: dos, royal: idx === 0 }));
+        });
+        (EP.debates || []).forEach((deb, idx) => {
+          uEnd.nodes.push(addNode({ id: "jury:" + deb.id, kind: "jury", title: `Jury Oral C2 · ${deb.title}`, enTitle: `Live Jury · ${deb.enTitle || deb.title}`, cefr: "C2", unit: uEnd.id, data: deb, royal: idx === 0 }));
+        });
+      }
+      if (uEnd.nodes.length) UNITS.push(uEnd);
       const id = "gate:" + lv;
       const u = { id: "ug-" + lv, num: null, gate: lv, title: lv === "C2" ? "Passage C2 → Natif" : `Passage ${lv} → ${CEFR[cefrRank(lv) + 1]}`, cefr: lv, nodes: [] };
-      u.nodes.push(addNode({ id, kind: "gate", title: (EXAMS()[lv] && EXAMS()[lv].title) || `Examen ${lv}`, cefr: lv, unit: u.id, level: lv }));
+      u.nodes.push(addNode({ id, kind: "gate", title: (EXAMS()[lv] && EXAMS()[lv].title) || `Examen ${lv}`, cefr: lv, unit: u.id, level: lv, royal: true }));
       UNITS.push(u);
     };
+    const lvWorldCounter = {};
     WORLDS.forEach((w) => {
-      if (prevLevel && w.cefr !== prevLevel) pushGate(prevLevel);
+      if (prevLevel && w.cefr !== prevLevel) pushLevelFinaleAndGate(prevLevel);
       prevLevel = w.cefr;
+      const wIdx = lvWorldCounter[w.cefr] = (lvWorldCounter[w.cefr] || 0);
+      lvWorldCounter[w.cefr] = wIdx + 1;
       const u = { id: "w" + w.number, num: w.number, title: String(w.title || "").replace(/\s*\(.*?\)\s*$/, ""), cefr: w.cefr, world: w, nodes: [] };
       const stages = (w.stages || []).filter((s) => s.type !== "boss");
       const boss = (w.stages || []).filter((s) => s.type === "boss");
       const scenes = sceneFor[w.number] || [], reads = readFor[w.number] || [];
       const dists = distFor[w.number] || [], atels = atelFor[w.number] || [];
+      const exps = expFor[w.number] || [], essecs = essecFor[w.number] || [];
       const mid = Math.max(1, Math.round(stages.length / 2));
+      // Weave remaining Indian-English Accent Detox drills organically inside A1 & A2 worlds
+      if (w.cefr === "A1" && (wIdx === 2 || wIdx === 6)) {
+        const sid = detoxIdsA1[wIdx === 2 ? 1 : 2];
+        const sObj = findSound(sid);
+        u.nodes.push(addNode({ id: "snd:" + sObj.id, kind: "sound", title: sObj.title || sid, cefr: "A1", unit: u.id, data: sObj, world: w, royal: true }));
+      }
+      if (w.cefr === "A2" && (wIdx === 1 || wIdx === 4 || wIdx === 7)) {
+        const sid = detoxIdsA2[wIdx === 1 ? 0 : wIdx === 4 ? 1 : 2];
+        const sObj = findSound(sid);
+        u.nodes.push(addNode({ id: "snd:" + sObj.id, kind: "sound", title: sObj.title || sid, cefr: "A2", unit: u.id, data: sObj, world: w, royal: true }));
+      }
+      exps.forEach((ex) => u.nodes.push(addNode({ id: "exp:" + ex.id, kind: "explore", title: ex.title, cefr: ex.cefr || w.cefr, unit: u.id, data: ex, world: w, royal: true })));
       stages.forEach((s, i) => {
         u.nodes.push(addNode({ id: "st:" + s.stageId, kind: s.type || "core", title: String(s.title || "").replace(/\s*\(Core Foundation\)/i, ""), cefr: w.cefr, unit: u.id, stage: s, world: w }));
         if (i === mid - 1 && scenes[0]) u.nodes.push(addNode({ id: "scene:" + scenes[0].id, kind: "scene", title: scenes[0].title, cefr: scenes[0].cefr, unit: u.id, data: scenes[0], world: w }));
       });
       scenes.slice(1).forEach((sc) => u.nodes.push(addNode({ id: "scene:" + sc.id, kind: "scene", title: sc.title, cefr: sc.cefr, unit: u.id, data: sc, world: w })));
+      essecs.forEach((es) => u.nodes.push(addNode({ id: "essec:" + es.id, kind: "essec", title: es.title, enTitle: es.enTitle || es.title, cefr: es.cefr || w.cefr, unit: u.id, data: es, world: w, royal: true })));
       dists.forEach((d) => u.nodes.push(addNode({ id: "dist:" + d.id, kind: "district", title: `${d.name} (${d.arrondissement})`, cefr: d.cefr || w.cefr, unit: u.id, data: d, world: w })));
       reads.forEach((rd) => u.nodes.push(addNode({ id: "read:" + rd.id, kind: "read", title: rd.title, cefr: rd.cefr, unit: u.id, data: rd, world: w })));
       atels.forEach((at) => u.nodes.push(addNode({ id: "atel:" + at.id, kind: "atelier", title: at.title, cefr: at.cefr || w.cefr, unit: u.id, data: at, world: w })));
@@ -1114,29 +1345,28 @@
       boss.forEach((s) => u.nodes.push(addNode({ id: "st:" + s.stageId, kind: "boss", title: String(s.title || "").replace(/^Guardian Boss:\s*/i, "Boss: "), cefr: w.cefr, unit: u.id, stage: s, world: w })));
       UNITS.push(u);
     });
-    if (prevLevel) pushGate(prevLevel);
+    if (prevLevel) pushLevelFinaleAndGate(prevLevel);
     // Final
     const fu = { id: "u-natif", num: null, gate: "NATIF", title: "Le Grand Examen Natif", cefr: "NATIF", nodes: [] };
     fu.nodes.push(addNode({ id: "gate:NATIF", kind: "natif", title: "Le Grand Examen Natif", cefr: "NATIF", unit: fu.id, level: "NATIF", royal: true }));
     UNITS.push(fu);
     UNITS.forEach((u) => { const seenT = {}; u.nodes.forEach((n) => { n.unitObj = u; const k = n.title.toLowerCase(); if (seenT[k]) n.title = `${n.title} · ${n.kind === "supplementary" ? "practice" : (KIND_META[n.kind] || {}).label || "II"}`; seenT[k] = true; }); });
-    // Mark "Voie Royale — Fondation Complète": 1 Core stage from EVERY single world in each CEFR level + audio dialogues + A1 Sound Bootcamps (ZERO skipped foundations!)
+    // Mark "Voie Royale — The One Golden Path": 1 Core stage per world + interleaved scenes/sounds/swipes/stories/ESSEC/districts/memory_lock/boss/gate
     CEFR.forEach((lv) => {
       const lvNodes = NODES.filter((n) => n.cefr === lv);
-      if (lv === "A1") {
-        lvNodes.filter((n) => n.kind === "boot").slice(0, 5).forEach((n) => { n.royal = true; });
-      }
       const lvUnits = UNITS.filter((u) => u.world && u.cefr === lv);
       lvUnits.forEach((u) => {
         const coreSt = u.nodes.find((n) => n.kind === "core") || u.nodes[0];
         if (coreSt) coreSt.royal = true;
       });
-      lvNodes.filter((n) => n.kind === "exercise").slice(0, 3).forEach((n) => { n.royal = true; });
       lvNodes.filter((n) => n.kind === "district").slice(0, 2).forEach((n) => { n.royal = true; });
-      lvNodes.filter((n) => n.kind === "scene").slice(0, 1).forEach((n) => { n.royal = true; });
-      lvNodes.filter((n) => n.kind === "read").slice(0, 1).forEach((n) => { n.royal = true; });
-      lvNodes.filter((n) => n.kind === "atelier").slice(0, 2).forEach((n) => { n.royal = true; });
-      lvNodes.filter((n) => n.kind === "mission").slice(0, 1).forEach((n) => { n.royal = true; });
+      if (lv !== "A1") {
+        lvNodes.filter((n) => n.kind === "exercise").slice(0, 2).forEach((n) => { n.royal = true; });
+        lvNodes.filter((n) => n.kind === "scene").slice(0, 1).forEach((n) => { n.royal = true; });
+        lvNodes.filter((n) => n.kind === "read").slice(0, 1).forEach((n) => { n.royal = true; });
+        lvNodes.filter((n) => n.kind === "atelier").slice(0, 2).forEach((n) => { n.royal = true; });
+        lvNodes.filter((n) => n.kind === "mission").slice(0, 1).forEach((n) => { n.royal = true; });
+      }
       const bosses = lvNodes.filter((n) => n.kind === "boss");
       if (bosses.length) bosses[bosses.length - 1].royal = true;
       lvNodes.filter((n) => n.kind === "gate").forEach((n) => { n.royal = true; });
@@ -1153,6 +1383,8 @@
     NODES.forEach((n) => { if (n.kind === "district" && n.data && cd[n.data.id] && !c.done[n.id]) c.done[n.id] = 3; });
     const cw = s.completedWritings || {};
     NODES.forEach((n) => { if (n.kind === "atelier" && n.data && cw[n.data.id] && !c.done[n.id]) c.done[n.id] = 3; });
+    const chd = c.chroniquesDone || {};
+    NODES.forEach((n) => { if (n.kind === "chronique" && n.data && chd[n.data.id] && !c.done[n.id]) c.done[n.id] = 3; });
   }
   function jumpBase() {
     // index after the furthest passed (or placed) gate; nodes before it are open
@@ -1166,12 +1398,12 @@
         }
       });
     }
-    if (c.skipBoot) { const firstW = NODES.find((n) => n.kind !== "boot"); if (firstW) base = Math.max(base, firstW.idx); }
+    if (c.skipBoot) { const firstW = NODES.find((n) => n.unit !== "u0"); if (firstW) base = Math.max(base, firstW.idx); }
     return base;
   }
   function nextNode() {
     const c = CH(), base = jumpBase();
-    if (c.activeNodeId && NODE_BY_ID[c.activeNodeId] && c.partial && hasPartialProgress(c.partial[c.activeNodeId]) && !c.done[c.activeNodeId]) {
+    if (c.activeNodeId && NODE_BY_ID[c.activeNodeId] && c.partial && hasPartialProgress(c.partial[c.activeNodeId]) && !isStaleMarathonPartial(NODE_BY_ID[c.activeNodeId], c.partial[c.activeNodeId]) && !c.done[c.activeNodeId]) {
       return NODE_BY_ID[c.activeNodeId];
     }
     const isRoyal = c.pathMode !== "integral";
@@ -1190,7 +1422,7 @@
     if (c.unlockedNodes && c.unlockedNodes[n.id]) return true;
     if (c.unlockedLevels && c.unlockedLevels[levelOfNode(n)]) return true;
     if (c.partial && hasPartialProgress(c.partial[n.id])) return true;
-    if (n.unit === "u0" || n.id === "st:1-1" || n.kind === "district" || n.kind === "atelier" || n.kind === "read" || n.kind === "scene") return true;
+    if (n.unit === "u0" || n.id === "st:1-1" || n.kind === "district" || n.kind === "atelier" || n.kind === "read" || n.kind === "scene" || n.kind === "explore" || n.kind === "chronique" || n.kind === "essec" || n.kind === "dossier" || n.kind === "jury" || n.kind === "radio") return true;
     const nx = nextNode();
     if (c.pathMode !== "integral" && n.royal && cefrRank(levelOfNode(n)) <= cefrRank(levelOfNode(nx))) return true;
     return n.idx <= nx.idx || n.idx < jumpBase();
@@ -1234,7 +1466,7 @@
 
   // =================================================================== SESSION BUILDERS
   // A step = { k: kind, ...data, skill, card? }. Gradable kinds re-queue on error.
-  const GRADABLE = new Set(["mcq", "listen", "build", "type", "dictee", "speak", "match", "dialogue", "shadow", "memory", "reflex", "simturn", "quest", "register", "radio", "enquete", "liaison", "forgeron", "joute", "idiome", "synthese", "periode", "concordance", "ame", "pensee", "explore", "visreflex", "swipe"]);
+  const GRADABLE = new Set(["mcq", "listen", "build", "type", "dictee", "speak", "match", "dialogue", "shadow", "memory", "reflex", "simturn", "quest", "register", "radio", "enquete", "liaison", "forgeron", "joute", "idiome", "synthese", "periode", "concordance", "ame", "pensee", "explore", "visreflex", "swipe", "dossier", "jury"]);
   function rhythmChunks(fr) {
     const clean = String(fr || "").trim();
     if (!clean) return [];
@@ -3556,17 +3788,25 @@
   function buildRadioSteps(cefr, max = 1) {
     const G = GYM(); const r = cefrRank(cefr); const out = [];
     const cult = shuffle((G.culture || []).filter((c) => c && c.q && c.answer && Array.isArray(c.choices) && c.choices.length >= 3));
-    const shows = (RADIO() || []).filter((sh) => cefrRank(sh.level || "B1") <= r + 1);
-    const sh = pick(shows) || (RADIO() || [])[0];
-    const ep = sh && pick(sh.episodes || []);
+    const shows = (RADIO() || []).filter((sh) => cefrRank(sh.level || "B1") <= r + 1 && (sh.episodes || []).some((e) => e && e.audio));
+    const exactShows = shows.filter((sh) => cefrRank(sh.level || "B1") === r);
+    const sh = pick(exactShows.length ? exactShows : shows) || (RADIO() || [])[0];
+    const eps = (sh && sh.episodes || []).filter((e) => e && e.audio);
+    const ep = pick(eps) || (sh && sh.episodes && sh.episodes[0]);
+    const debates = (ESSEC_PACK().debates || []);
+    const debFallback = debates[0] || null;
     if (cult.length) {
       const c = cult[0];
       out.push({
         k: "radio",
+        level: cefr,
         showName: sh ? `📻 ${sh.name} (${sh.level})` : "📻 Radio Lumière Paris",
-        epTitle: "Flash Culture & Société Française",
+        epTitle: (ep && ep.title) ? ep.title : "Flash Culture & Société Française",
+        audioUrl: (ep && ep.audio) || "",
+        duration: (ep && ep.duration) || "10:00",
+        fallbackDebate: debFallback,
         fr: `${c.q} ${c.fact || ""}`,
-        summaryFr: `${c.q}${c.en ? " — (" + c.en + ")" : ""}`,
+        summaryFr: (ep && ep.summary) ? ep.summary : `${c.q}${c.en ? " — (" + c.en + ")" : ""}`,
         q: c.q,
         q_en: c.en || "",
         choices: shuffle(c.choices.slice()),
@@ -3581,8 +3821,12 @@
       const d = defs[0]; const others = defs.slice(1).filter((x) => normLoose(x.word) !== normLoose(d.word)).slice(0, 3).map((x) => x.word);
       out.push({
         k: "radio",
-        showName: "📻 Le Mot du Jour · Académie",
-        epTitle: "Définition en français authentique",
+        level: cefr,
+        showName: sh ? `📻 ${sh.name} (${sh.level})` : "📻 Le Mot du Jour · Académie",
+        epTitle: (ep && ep.title) ? ep.title : "Définition en français authentique",
+        audioUrl: (ep && ep.audio) || "",
+        duration: (ep && ep.duration) || "",
+        fallbackDebate: debFallback,
         fr: d.def,
         summaryFr: `Indice : niveau ${d.cefr || cefr}`,
         q: `« ${d.def} » — Quel est ce mot ?`,
@@ -3604,28 +3848,29 @@
       ...buildQuestSteps(cefr, 1),
       ...buildVisReflexSteps(cefr, 1)
     ]);
+    // Strict CEFR gating: A1-A2 never leak B2-C2 grammar (joute, periode, concordance, enquete, synthese, idiome)
     const bucketB = shuffle([
-      ...buildForgeronSteps(cefr, 1),
-      ...buildLiaisonSteps(cefr, 1),
       ...buildSwipeSteps(cefr, 1),
-      ...(r >= 1 ? buildConcordanceSteps(cefr, 1) : []),
-      ...(r >= 2 ? buildPeriodeSteps(cefr, 1) : [])
+      ...(r >= 1 ? buildLiaisonSteps(cefr, 1) : []),
+      ...(r >= 2 ? buildForgeronSteps(cefr, 1) : []),
+      ...(r >= 3 ? buildConcordanceSteps(cefr, 1) : []),
+      ...(r >= 4 ? buildPeriodeSteps(cefr, 1) : [])
     ]);
     const bucketC = shuffle([
-      ...buildRadioSteps(cefr, 1),
-      ...buildRegisterSteps(cefr, 1),
-      ...(r >= 1 ? buildIdiomeSteps(cefr, 1) : []),
-      ...(r >= 2 ? buildEnqueteSteps(cefr, 1) : []),
-      ...(r >= 2 ? buildJouteSteps(cefr, 1) : []),
-      ...(r >= 3 ? buildSyntheseSteps(cefr, 1) : [])
+      ...(r >= 2 ? buildRadioSteps(cefr, 1) : []),
+      ...(r >= 2 ? buildRegisterSteps(cefr, 1) : []),
+      ...(r >= 3 ? buildIdiomeSteps(cefr, 1) : []),
+      ...(r >= 3 ? buildEnqueteSteps(cefr, 1) : []),
+      ...(r >= 4 ? buildJouteSteps(cefr, 1) : []),
+      ...(r >= 4 ? buildSyntheseSteps(cefr, 1) : [])
     ]);
     const out = [];
     if (bucketA[0]) out.push(bucketA[0]);
     if (bucketB[0]) out.push(bucketB[0]);
     if (bucketC[0]) out.push(bucketC[0]);
     const rest = shuffle(bucketA.slice(1).concat(bucketB.slice(1), bucketC.slice(1)));
-    while (out.length < (max || 3) && rest.length) out.push(rest.shift());
-    return out.slice(0, max || 3);
+    while (out.length < (max || 2) && rest.length) out.push(rest.shift());
+    return out.slice(0, max || 2);
   }
   function buildExploreSteps(sceneIdOrCefr) {
     const scenes = Array.isArray(window.VISUAL_SCENES) ? window.VISUAL_SCENES : [];
@@ -3716,7 +3961,7 @@
     return steps;
   }
 
-  // ---- regular stage
+  // ---- regular stage (v28 crisp 5-8 step ~2-3 min bite — zero 17-step marathons!)
   function buildStageSession(n) {
     const cards = stageCards(n);
     const pool = unitPool(n).length > 8 ? unitPool(n) : cards.concat(cleanCards(DATA.flashcards || []).slice(0, 200));
@@ -3725,53 +3970,34 @@
     let steps = [];
     if (lesson) {
       steps.push({ k: "intro", title: lesson.title, goal: lesson.goal, place: n.world ? `📍 Monde ${n.world.number} · ${n.world.title}` : "" });
-      lesson.turns.forEach((t) => {
-        if (t.t === "say") steps.push(...teachSteps(t.text));
-        else if (t.t === "tip") steps.push(...teachSteps(t.text, { tip: true }));
+      const turns = (lesson.turns || []).slice(0, 6);
+      turns.forEach((t) => {
+        if (t.t === "say") steps.push(...teachSteps(t.text).slice(0, 1));
+        else if (t.t === "tip") steps.push(...teachSteps(t.text, { tip: true }).slice(0, 1));
         else if (t.t === "example") steps.push({ k: "example", fr: t.fr, en: t.en, note: t.note || "" });
         else if (t.t === "ask") steps.push({ k: "mcq", qHtml: rich(t.q), choices: shuffle(t.choices), answer: t.answer, right: t.right, wrong: t.wrong, skill: ["grammar", "reading"] });
         else if (t.t === "type") steps.push({ k: "type", qHtml: rich(t.q), answer: t.answer, accept: [t.answer].concat(t.accept || []), hint: t.hint, right: t.right, wrong: t.wrong, skill: ["writing", "grammar"] });
         else if (t.t === "speak") steps.push({ k: "speak", fr: t.fr, en: "", lead: t.text, skill: ["speaking", "pronunciation"] });
       });
-      const f = shuffle(cards.filter((c) => words(c.fr).length <= 10)).slice(0, 6);
-      const prac = [];
-      const m = matchStep(f.length >= 4 ? f : cards); if (m) prac.push(m);
-      if (f[0]) prac.push(cardStep("shadow", f[0], pool, cefr) || cardStep("listen", f[0], pool, cefr));
-      if (f[1]) prac.push(cardStep("memory", f[1], pool, cefr) || cardStep("build", f[1], pool, cefr));
-      if (f[2]) prac.push(cardStep("reflex", f[2], pool, cefr) || cardStep("dictee", f[2], pool, cefr));
-      if (f[3]) prac.push(cardStep("type", f[3], pool, cefr) || cardStep("speak", f[3], pool, cefr));
-      const sim = buildSimTurnFromCards(f.concat(cards), n.world && n.world.title);
-      if (sim) prac.push(sim);
-      steps.push({ k: "banner", text: "Situation Vivante à Paris", sub: "Use your French in real decisions, registers & live speech" });
-      steps.push(...prac.filter(Boolean));
-      steps.push(...nativeSteps(cefr, 3));
-      const weak = cleanCards(reviewCards()).slice(0, 1);
-      if (weak[0]) steps.push(cardStep("memory", weak[0], pool, cefr) || cardStep("en2fr", weak[0], pool, cefr));
-      return steps.filter(Boolean);
+      const f = shuffle(cards.filter((c) => words(c.fr).length <= 10)).slice(0, 4);
+      const m = matchStep(f.length >= 4 ? f : cards);
+      if (m && steps.length < 7) steps.push(m);
+      if (f[0] && steps.length < 7) steps.push(cardStep("shadow", f[0], pool, cefr) || cardStep("listen", f[0], pool, cefr));
+      if (f[1] && steps.length < 8) steps.push(cardStep("memory", f[1], pool, cefr) || cardStep("build", f[1], pool, cefr));
+      return steps.filter(Boolean).slice(0, 8);
     }
-    if (n.kind === "exercise") return buildDialogueStage(n, cards, pool);
-    // auto session from phrases (active brain-wiring loop + Parisian situation)
-    const focus = focusCards(n, cards, cefrRank(cefr) <= 1 ? 7 : 6);
-    steps.push({ k: "intro", title: n.title, goal: `${focus.length} key expressions · explore the scene, react in context & speak`, place: n.world ? `📍 Monde ${n.world.number} · ${n.world.title}` : "" });
-    const kinds = ["shadow", "memory", "speak", "reflex", "build", "type", "listen", "dictee"];
+    if (n.kind === "exercise") return buildDialogueStage(n, cards, pool).slice(0, 8);
+    const focus = focusCards(n, cards, 3);
+    steps.push({ k: "intro", title: n.title, goal: `${focus.length} key expressions · ~2–3 min active bite`, place: n.world ? `📍 Monde ${n.world.number} · ${n.world.title}` : "" });
+    const kinds = ["listen", "shadow", "memory", "build", "speak", "reflex"];
     focus.forEach((c, i) => {
       steps.push(cardStep("example", c, pool, cefr));
-      if (i % 2 === 1) {
-        steps.push(cardStep(kinds[(i - 1) % kinds.length], focus[i - 1], pool, cefr) || cardStep("listen", focus[i - 1], pool, cefr));
-        steps.push(cardStep(kinds[i % kinds.length], c, pool, cefr) || cardStep("en2fr", c, pool, cefr));
-      }
+      steps.push(cardStep(kinds[i % kinds.length], c, pool, cefr) || cardStep("fr2en", c, pool, cefr));
     });
-    if (focus.length % 2 === 1) steps.push(cardStep("reflex", focus[focus.length - 1], pool, cefr) || cardStep("fr2en", focus[focus.length - 1], pool, cefr));
-    steps.push({ k: "banner", text: "Situation Vivante & Registres", sub: "Decisions, style-shifting & live reply in Paris" });
-    const m = matchStep(shuffle(focus)); if (m) steps.push(m);
-    steps.push(...drillSteps(n.stage, 2));
-    shuffle(focus).slice(0, 3).forEach((c, i) => steps.push(cardStep(["memory", "reflex", "shadow"][i], c, pool, cefr) || cardStep("build", c, pool, cefr) || cardStep("en2fr", c, pool, cefr)));
-    steps.push(...nativeSteps(cefr, 3));
-    const sim = buildSimTurnFromCards(focus.concat(cards), n.world && n.world.title);
-    if (sim) steps.push(sim);
-    const weak = cleanCards(reviewCards()).slice(0, 1);
-    if (weak[0]) steps.push(cardStep("type", weak[0], pool, cefr) || cardStep("en2fr", weak[0], pool, cefr));
-    return steps.filter(Boolean);
+    const m = matchStep(shuffle(focus.concat(cards).slice(0, 4)));
+    if (m && steps.length < 8) steps.push(m);
+    if (steps.length < 8) steps.push(...nativeSteps(cefr, 1));
+    return steps.filter(Boolean).slice(0, 8);
   }
   function buildDialogueStage(n, cards, pool) {
     const lines = cards.slice(0, 8);
@@ -3797,7 +4023,7 @@
     if (sim) steps.push(sim);
     return steps.filter(Boolean);
   }
-  const GRADED_KINDS = new Set(["mcq", "listen", "build", "type", "dictee", "speak", "match", "dialogue", "shadow", "memory", "reflex", "simturn", "quest", "register", "radio", "enquete", "liaison", "forgeron", "joute", "idiome", "synthese", "periode", "concordance", "ame", "pensee", "explore", "visreflex", "swipe"]);
+  const GRADED_KINDS = new Set(["mcq", "listen", "build", "type", "dictee", "speak", "match", "dialogue", "shadow", "memory", "reflex", "simturn", "quest", "register", "radio", "enquete", "liaison", "forgeron", "joute", "idiome", "synthese", "periode", "concordance", "ame", "pensee", "explore", "visreflex", "swipe", "dossier", "jury"]);
   function topUp(steps, pool, cefr, min) {
     let g = steps.filter((s) => s && GRADED_KINDS.has(s.k)).length;
     if (g >= min) return steps;
@@ -4090,16 +4316,196 @@
     if (sim) steps.push(sim);
     return steps.filter(Boolean);
   }
-  // ---- bootcamp (unit 0)
+  // ---- bootcamp (unit 0 — capped to 6-7 crisp ~2-min steps!)
   function buildBootSession(n) {
-    const b = n.data; const ph = cleanCards(b.phrases || []);
-    const steps = [{ k: "intro", title: b.title, goal: b.why || "" }];
-    (b.teach || []).forEach((t) => steps.push({ k: "teach", parts: [t], autoFr: true }));
-    ph.forEach((c, i) => { steps.push({ k: "example", fr: c.fr, en: c.en }); if (i % 2 === 1) steps.push(cardStep("listen", ph[i - 1], ph, "A1")); });
+    const b = n.data || {}; const ph = cleanCards(b.phrases || []).slice(0, 4);
+    const steps = [{ k: "intro", title: b.title || "First Sounds", goal: b.why || "Listen, notice the rhythm, and say it out loud (~2 min)." }];
+    const teach = (b.teach || []).slice(0, 2);
+    if (teach.length) steps.push({ k: "teach", parts: teach, autoFr: true });
+    ph.slice(0, 2).forEach((c) => steps.push({ k: "example", fr: c.fr, en: c.en }));
+    if (ph[0]) steps.push(cardStep("listen", ph[0], ph, "A1"));
     const m = matchStep(ph); if (m) steps.push(m);
     if (ph[0]) steps.push(cardStep("speak", ph[0], ph, "A1"));
-    if (ph[1]) steps.push(cardStep("build", ph[1], ph, "A1") || cardStep("fr2en", ph[1], ph, "A1"));
-    if (ph[2]) steps.push(cardStep("listen", ph[2], ph, "A1"));
+    if (ph[1] && steps.length < 7) steps.push(cardStep("build", ph[1], ph, "A1") || cardStep("fr2en", ph[1], ph, "A1"));
+    return steps.filter(Boolean).slice(0, 8);
+  }
+  // ---- Indian-English -> French Accent Detox / Sound Mini-Lab (6-7 steps)
+  function buildSoundMiniSession(soundObjOrId) {
+    const all = (SLD && SLD.sounds) || [];
+    const s = (typeof soundObjOrId === "string" ? all.find((x) => x.id === soundObjOrId) : soundObjOrId) || all[0];
+    if (!s) return [];
+    const steps = [{
+      k: "intro",
+      title: `👄 ${s.title || "French Sound Bite"}`,
+      place: s.accent_detox ? "🎯 Accent Detox · 2 min" : "👄 Sound Mini-Lab · 2 min",
+      goal: s.tip || s.mouth || s.why || "Train your ear and mouth with warm, step-by-step French coaching."
+    }];
+    if (s.mouth || s.english_hint || s.tip || s.trap) {
+      steps.push({ k: "teach", parts: [s.mouth, s.english_hint, s.tip, s.trap].filter(Boolean).slice(0, 3), tip: true, autoFr: true });
+    }
+    const pairs = (((SLD && SLD.pairs) || []).filter((p) => p && p.sound === s.id).length
+      ? ((SLD && SLD.pairs) || []).filter((p) => p && p.sound === s.id)
+      : (s.pairs || [])).slice(0, 3);
+    pairs.forEach((p) => {
+      const a = p.a || p[0], b = p.b || p[1];
+      if (!a || !b) return;
+      const aFr = typeof a === "string" ? a : (a.fr || a.word || "");
+      const bFr = typeof b === "string" ? b : (b.fr || b.word || "");
+      if (aFr && bFr) {
+        steps.push({
+          k: "listen",
+          fr: aFr,
+          en: p.a_en || (typeof a === "object" ? (a.en || "") : ""),
+          prompt: "listenPick",
+          choices: shuffle([aFr, bFr]),
+          answer: aFr,
+          why: p.why || p.note || `Contrast « ${aFr} » (${p.a_en || ""}) vs « ${bFr} » (${p.b_en || ""})`,
+          sayAnswer: true,
+          skill: ["pronunciation", "listening"]
+        });
+      }
+    });
+    const exs = (s.phrases || s.examples || []).slice(0, 2);
+    exs.forEach((ex) => {
+      const fr = typeof ex === "string" ? ex : (ex.fr || "");
+      const en = typeof ex === "object" ? (ex.en || "") : "";
+      if (fr) steps.push({ k: "speak", fr, en, lead: s.mouth || "Say it smoothly out loud:", skill: ["pronunciation", "speaking"] });
+    });
+    if (steps.length < 4 && s.example) {
+      steps.push({ k: "speak", fr: s.example, en: s.exampleEn || "", lead: "Repeat aloud:", skill: ["pronunciation", "speaking"] });
+    }
+    return steps.filter(Boolean).slice(0, 8);
+  }
+  // ---- ESSEC / Cergy / RER A / Préfecture / La Défense Real-Life Scenario
+  function buildEssecSession(scOrId) {
+    const list = ESSEC_PACK().scenarios || [];
+    const sc = (typeof scOrId === "string" ? list.find((x) => x.id === scOrId) : scOrId) || list[0];
+    if (!sc) return [];
+    const steps = [{
+      k: "intro",
+      title: `${sc.icon || "🏛️"} ${isEnGuide() ? (sc.enTitle || sc.title) : sc.title}`,
+      place: `📍 ${sc.location || "Cergy · Paris"} · ${sc.cefr || "B1"}`,
+      goal: isEnGuide() ? (sc.enSummary || sc.summary || "") : (sc.summary || "")
+    }];
+    (sc.lines || []).slice(0, 5).forEach((ln) => {
+      const opts = (ln.opts || []).map((txt, idx) => ({ fr: txt, ok: idx === (ln.ok || 0), why: ln.tip || "" }));
+      steps.push({
+        k: "dialogue",
+        place: sc.location || "Paris · ESSEC",
+        npc: ln.fr,
+        npc_en: ln.en || "",
+        speaker: ln.sp || sc.speaker || "Interlocuteur",
+        options: shuffle(opts),
+        skill: ["listening", "speaking"]
+      });
+    });
+    if (sc.writePrompt) {
+      steps.push({
+        k: "write",
+        level: sc.cefr || "B1",
+        task_type: sc.title,
+        prompt_fr: sc.writePrompt,
+        prompt_en: sc.enSummary || sc.writePrompt,
+        minWords: sc.writeMinWords || 35,
+        skill: ["writing", "grammar"]
+      });
+    }
+    return steps.filter(Boolean);
+  }
+  // ---- Chapter-End Memory Lock (0% MCQ — pure active recall + cross-era FSRS spiral)
+  function buildMemoryLockSession(lv) {
+    const cefr = CEFR.includes(lv) ? lv : (currentLevel() === "NATIF" ? "C2" : currentLevel());
+    const { pool } = activeArcCards(cefr);
+    const rev = cleanCards(reviewCards());
+    const spiral = rev.slice(0, 3).concat(shuffle(pool).slice(0, 6)).filter((c) => c && c.fr && words(c.fr).length >= 2 && words(c.fr).length <= 12);
+    const steps = [{
+      k: "intro",
+      title: isEnGuide() ? `🔒 Memory Lock · ${cefr} Active Recall` : `🔒 Verrou Mémoire · Rappel Actif ${cefr}`,
+      place: `🧠 0% MCQ · Cross-Era Recall (${cefr})`,
+      goal: isEnGuide() ? "Lock in your real fluency from memory — write, build, and speak aloud with progressive hints if you get stuck." : "Ancrez vos acquis de mémoire pure — écrire et parler sans QCM."
+    }];
+    const kinds = ["memory", "speak", "type", "shadow", "memory"];
+    spiral.slice(0, 5).forEach((c, i) => {
+      const st = cardStep(kinds[i % kinds.length], c, pool, cefr) || cardStep("type", c, pool, cefr);
+      if (st) steps.push(st);
+    });
+    return steps.filter(Boolean);
+  }
+  // ---- Official DALF C2 Multi-Document Dossier (2-Pane Split View, ~2,000w docs -> 700w synthesis)
+  function buildDossierSession(dosOrId) {
+    const list = ESSEC_PACK().dossiers || [];
+    const d = (typeof dosOrId === "string" ? list.find((x) => x.id === dosOrId) : dosOrId) || list[0];
+    if (!d) return [];
+    return [
+      {
+        k: "intro",
+        title: `📑 ${d.title}`,
+        place: `🏛️ DALF C2 · ${d.domain || "Production Écrite"} · ${d.minWords || 700} mots`,
+        goal: `${d.role ? d.role + " — " : ""}${d.task || "Synthétisez l'ensemble du dossier en un texte structuré d'au moins 700 mots."} (Auto-sauvegardé toutes les 5s)`
+      },
+      {
+        k: "dossier",
+        dossierId: d.id,
+        level: d.cefr || "C2",
+        domain: d.domain || "DALF C2",
+        title: d.title,
+        enTitle: d.enTitle || d.title,
+        format: d.format || "Article / Rapport de synthèse",
+        role: d.role || "",
+        task: d.task || "",
+        minWords: d.minWords || 700,
+        docs: d.docs || [],
+        rubricPoints: d.rubricPoints || [],
+        keyConcepts: d.keyConcepts || [],
+        rubric: "dalf_c2",
+        strictWords: true,
+        skill: ["writing", "reading", "grammar"]
+      }
+    ];
+  }
+  // ---- Live Adversarial AI Jury Debate (Listening Debate + Exposé + Multi-Turn Jury Pushback)
+  function buildJurySession(debOrId) {
+    const list = ESSEC_PACK().debates || [];
+    const deb = (typeof debOrId === "string" ? list.find((x) => x.id === debOrId) : debOrId) || list[0];
+    if (!deb) return [];
+    const firstRadio = buildRadioSteps("C2", 1)[0];
+    const steps = [{
+      k: "intro",
+      title: `⚖️ ${deb.title}`,
+      place: `🏛️ DALF C2 Oral · ${deb.durationLabel || "Exposé & Débat Jury"}`,
+      goal: deb.exposePrompt || "Écoutez le débat, prenez des notes, présentez votre exposé puis défendez votre thèse face au jury."
+    }];
+    if (firstRadio) {
+      firstRadio.fallbackDebate = deb;
+      firstRadio.epTitle = deb.title;
+      steps.push(firstRadio);
+    }
+    steps.push({
+      k: "jury",
+      debateId: deb.id,
+      level: deb.cefr || "C2",
+      title: deb.title,
+      enTitle: deb.enTitle || deb.title,
+      exposePrompt: deb.exposePrompt || "",
+      outlineHints: deb.outlineHints || [],
+      juryPersona: deb.juryPersona || "Présidente du Jury DALF C2 · Sorbonne",
+      juryOpenings: deb.juryOpenings || ["Nous vous écoutons pour votre exposé, puis nous passerons aux questions contradictoires."],
+      juryPushbacks: deb.juryPushbacks || [],
+      minTurns: 4,
+      targetTurns: 6,
+      skill: ["speaking", "listening", "pronunciation"]
+    });
+    return steps;
+  }
+  function buildRadioMilestoneSession(lv) {
+    const cefr = CEFR.includes(lv) ? lv : "B1";
+    const steps = [{
+      k: "intro",
+      title: `📻 Radio Native · ${cefr}`,
+      place: `🎧 Authentic French Podcast & Note-Taking (${cefr})`,
+      goal: isEnGuide() ? "Listen to real native French audio, jot down key ideas, and answer without relying on subtitles." : "Écoutez le français authentique à vitesse réelle, prenez des notes et analysez l'extrait."
+    }];
+    steps.push(...buildRadioSteps(cefr, 2));
     return steps.filter(Boolean);
   }
   // ---- role-play scene
@@ -4528,10 +4934,19 @@
   function buildSessionFor0(n) {
     if (!n) return null;
     if (n.kind === "boot") return buildBootSession(n);
+    if (n.kind === "explore") return buildExploreSession((n.data && n.data.id) || n.cefr);
+    if (n.kind === "sound") return buildSoundMiniSession(n.data || n.id.replace(/^snd:/, ""));
+    if (n.kind === "swipe") return buildSwipeSession((n.data && n.data.lv) || n.cefr);
+    if (n.kind === "chronique") return buildChroniqueSession(n.data && n.data.id);
+    if (n.kind === "essec") return buildEssecSession(n.data || n.id.replace(/^essec:/, ""));
+    if (n.kind === "memory_lock") return buildMemoryLockSession((n.data && n.data.lv) || n.cefr);
+    if (n.kind === "radio") return buildRadioMilestoneSession((n.data && n.data.lv) || n.cefr);
+    if (n.kind === "dossier") return buildDossierSession(n.data || n.id.replace(/^dos:/, ""));
+    if (n.kind === "jury") return buildJurySession(n.data || n.id.replace(/^jury:/, ""));
     if (n.kind === "district") return buildDistrictSession(n);
     if (n.kind === "atelier") return buildAtelierSession(n);
-    if (n.kind === "boss") return topUp(buildBossSession(n), unitPool(n), n.cefr, 10);
-    if (n.stage) { const own = stageCards(n); return topUp(topUp(buildStageSession(n), own, n.cefr, 7), unitPool(n), n.cefr, 4); }
+    if (n.kind === "boss") return topUp(buildBossSession(n), unitPool(n), n.cefr, 8);
+    if (n.stage) { const own = stageCards(n); return topUp(buildStageSession(n), own.length ? own : unitPool(n), n.cefr, 5).slice(0, 8); }
     if (n.kind === "scene") return buildSceneSession(n);
     if (n.kind === "read") return buildReadSession(n);
     if (n.kind === "mission") return buildMissionSession(n);
@@ -4899,6 +5314,10 @@
   function relicToolbarHtml() {
     const s = SAVE();
     const c = CH();
+    // Hide RPG relic clutter on calm A1-A2 everyday bites (show on Boss, Exam, District quests, or B1+)
+    const sesLv = SES && SES.node ? levelOfNode(SES.node) : currentLevel();
+    const hideRelics = !!(SES && !SES.hearts && !SES.exam && !SES.microCap && SES.mode !== "district" && cefrRank(sesLv) <= 1);
+    if (hideRelics) return "";
     const inv = (s && s.inventory) || {};
     const f50 = inv.fiftyFifty || 0;
     const sh = inv.shield || 0;
@@ -4945,6 +5364,7 @@
       if ($("ody-sheet") || $("ody-drawer") || SES) return true;
       const sc = document.body.dataset.scene || "home";
       if (sc !== "home") return true;
+      if (HOME.tab && HOME.tab !== "play") return true;
       return this.stack.length > 1;
     },
     back() {
@@ -4976,6 +5396,13 @@
       // 5. Onboarding steps 1..3
       if (curScene === "onboarding" && OB.step > 0) {
         renderOnboarding(OB.step - 1);
+        return true;
+      }
+      // 5b. Non-play Home tab -> return to Play tab cleanly
+      if (curScene === "home" && HOME.tab && HOME.tab !== "play") {
+        HOME.tab = "play";
+        this.stack = [{ kind: "view", scene: "home" }];
+        renderHome();
         return true;
       }
       // 6. Any non-home view -> pop stack and return to previous view (default home)
@@ -5044,11 +5471,11 @@
     main.innerHTML = `
       <div class="ody-ses ${SES.hearts ? "is-boss" : ""} ${SES.exam ? "is-exam" : ""}" id="ody-ses">
         <div class="ody-ses-top">
-          <button type="button" class="ody-ses-back" data-a="quit" title="Sauvegarder et revenir à la carte (Échap)">← <span>Carte</span></button>
-          <button type="button" class="ody-ses-prev" id="ody-prev-btn" data-a="prev" title="Revenir à l'étape précédente (Alt+←)" ${SES.i === 0 || SES.exam ? "disabled" : ""}>◀ <span>Préc.</span></button>
+          <button type="button" class="ody-ses-back" data-a="quit" title="${ui("Save and return to Path (Esc)", "Sauvegarder et revenir à la carte (Échap)")}">← <span>${ui("Back", "Carte")}</span></button>
+          <button type="button" class="ody-ses-prev" id="ody-prev-btn" data-a="prev" title="${ui("Go back one step (Alt+←)", "Revenir à l'étape précédente (Alt+←)")}" ${SES.i === 0 || SES.exam ? "disabled" : ""}>◀ <span>${ui("Prev", "Préc.")}</span></button>
           <div class="ody-prog-wrap">
             <div class="ody-prog"><div class="ody-prog-fill" id="ody-prog"></div></div>
-            <span class="ody-step-num" id="ody-step-num">${SES.i + 1} / ${SES.steps.length}</span>
+            <span class="ody-step-num" id="ody-step-num">${ui(`Step ${SES.i + 1}/${SES.steps.length}`, `${SES.i + 1} / ${SES.steps.length}`)}</span>
           </div>
           <div class="ody-hearts" id="ody-hearts"></div>
           <div class="ody-combo" id="ody-combo"></div>
@@ -5058,14 +5485,14 @@
         <div class="ody-foot" id="ody-foot"></div>
       </div>`;
     window.scrollTo(0, 0);
-    if (res && hasPartialProgress(res)) toast("▶ Session reprise", `${node ? node.title + " · " : ""}Étape ${SES.i + 1} sur ${SES.steps.length}`, "💾");
+    if (res && hasPartialProgress(res)) toast(ui("▶ Resumed", "▶ Session reprise"), `${node ? node.title + " · " : ""}${ui(`Step ${SES.i + 1} of ${SES.steps.length}`, `Étape ${SES.i + 1} sur ${SES.steps.length}`)}`, "💾");
     savePartial(false);
     renderStep();
   }
   function updateTop() {
     if (!SES) return;
     const p = $("ody-prog"); if (p) p.style.width = `${Math.round((SES.i / SES.steps.length) * 100)}%`;
-    const sn = $("ody-step-num"); if (sn) sn.textContent = `${SES.i + 1} / ${SES.steps.length}`;
+    const sn = $("ody-step-num"); if (sn) sn.textContent = ui(`Step ${SES.i + 1}/${SES.steps.length}`, `${SES.i + 1} / ${SES.steps.length}`);
     const pb = $("ody-prev-btn"); if (pb) pb.disabled = SES.i <= 0 || !!SES.exam;
     const maxH = (SAVE().perks && SAVE().perks.sceauSorbonne) ? 4 : 3;
     const h = $("ody-hearts"); if (h) h.innerHTML = SES.hearts == null ? "" : "❤️".repeat(Math.max(0, SES.hearts)) + `<span class="dim">${"🖤".repeat(Math.max(0, maxH - SES.hearts))}</span>`;
@@ -5094,9 +5521,9 @@
     SES.lastMood = "ready";
     SES.lastBubble = "";
     const R = RENDER[st.k] || RENDER.unknown;
-    const showDiorama = st.k !== "explore";
-    const revBanner = st._resolved ? `<div class="ody-rewind-banner">👁️ Révision de l'étape précédente (déjà validée — réécoutez l'audio ou cliquez Continuer ▸)</div>` : "";
-    stage.innerHTML = `${showDiorama ? renderDiorama(st) : ""}<div class="ody-card ody-k-${st.k}">${revBanner}${R(st)}</div>`;
+    const showDiorama = st.k !== "explore" && st.k !== "dossier" && st.k !== "jury";
+    const revBanner = st._resolved ? `<div class="ody-rewind-banner">${ui("👁️ Reviewing previous step (already completed — replay audio or click Continue ▸)", "👁️ Révision de l'étape précédente (déjà validée — réécoutez l'audio ou cliquez Continuer ▸)")}</div>` : "";
+    stage.innerHTML = `${showDiorama ? renderDiorama(st) : ""}<div class="ody-card ody-k-${st.k}${st.k === "dossier" ? " is-wide-dossier" : ""}">${revBanner}${R(st)}</div>`;
     const rBar = $("ody-relics");
     if (rBar) rBar.outerHTML = relicToolbarHtml();
     stage.scrollTop = 0;
@@ -5500,25 +5927,114 @@
       const title = st.showName || st.showTitle || "📻 Radio Lumière";
       const sub = st.epTitle || st.host || "Direct de Paris";
       const audioTxt = st.audioText || st.fr || st.q || "";
-      const transTxt = st.transcript || st.summaryFr || st.fr || "";
+      const deb = st.fallbackDebate;
+      const debScript = deb && Array.isArray(deb.segments) ? deb.segments.map((sg) => `${sg.sp}: ${sg.text}`).join("\n") : "";
+      const transTxt = st.transcript || (st._useFallback && debScript) || st.summaryFr || st.fr || "";
+      const rate = st._rate || 1;
       return `<div class="ody-radio-card">
         <div class="ody-k-label">${esc(title)}</div>
-        <div class="ody-radio-console">
-          <div class="radio-wave"><span></span><span></span><span></span><span></span><span></span></div>
-          <div class="radio-meta">
-            <b>🎙️ ${esc(sub)}</b>
-            <small>${esc(st.speed || "Cadence directe")}</small>
+        <div class="ody-radio-player">
+          <div class="ody-radio-console">
+            <div class="radio-wave"><span></span><span></span><span></span><span></span><span></span></div>
+            <div class="radio-meta">
+              <b>🎙️ ${esc(sub)}</b>
+              <small>${st.audioUrl && !st._useFallback ? `🎧 ${ui("Real Native French Broadcast", "Émission Française Authentique")}${st.duration ? " · " + esc(st.duration) : ""}` : `🎙️ ${ui("Multi-Speaker Parisian Studio Debate (Offline-Safe)", "Débat Multi-Voix Parisien (Hors-Ligne)")}`}</small>
+            </div>
           </div>
-          <div class="ody-row">
-            <button class="ody-btn small primary" data-a="say" data-t="${esc(audioTxt)}">🔊 Écouter l'extrait</button>
-            <button class="ody-btn small ghost" data-a="slow">🐢 Cadence lente</button>
-            <button class="ody-btn small ghost" data-a="radiotext">${st._showText ? "🙈 Masquer" : "📜 Transcription"}</button>
+          ${st.audioUrl && !st._useFallback ? `<audio id="ody-radio-audio" controls preload="metadata" src="${esc(st.audioUrl)}"></audio>` : ""}
+          <div class="ody-radio-bar">
+            ${st.audioUrl && !st._useFallback ? `
+              <button type="button" class="ody-btn tiny ghost" data-a="radioseek" data-d="-10">⏪ -10s</button>
+              <button type="button" class="ody-btn tiny ghost" data-a="radioseek" data-d="10">+10s ⏩</button>
+              ${[0.85, 1, 1.15].map((r) => `<button type="button" class="ody-btn tiny ${rate === r ? "primary" : "ghost"}" data-a="radiorate" data-r="${r}">${r}×</button>`).join("")}
+            ` : `
+              <button type="button" class="ody-btn small primary" data-a="radioplaydebate">🔊 ${ui("Play Multi-Speaker Debate", "Écouter le débat")}</button>
+            `}
+            <button type="button" class="ody-btn small ghost" data-a="say" data-t="${esc(audioTxt)}">🔊 ${ui("Key Question", "Extrait clé")}</button>
+            <button type="button" class="ody-btn small ghost" data-a="slow">🐢 ${ui("Slow", "Lent")}</button>
+            <button type="button" class="ody-btn small ghost" data-a="radiotext">${st._showText ? ui("🙈 Hide Transcript", "🙈 Masquer") : ui("📜 French Transcript", "📜 Transcription")}</button>
+          </div>
+          <div class="ody-radio-notes">
+            <div class="ody-mini">📝 ${ui("Prise de notes (not graded — jot arguments & figures as you listen)", "Prise de notes (arguments clés, chiffres, thèses)")}</div>
+            <textarea id="ody-radio-notes" rows="2" placeholder="${ui("Jot key ideas here…", "Notez les idées clés ici…")}">${esc(st._notes || "")}</textarea>
           </div>
         </div>
-        ${st._showText ? `<div class="ody-radio-transcript">${esc(transTxt)}</div>` : ""}
+        ${st._showText ? `<div class="ody-radio-transcript" lang="fr" translate="no">${esc(transTxt).replace(/\n/g, "<br>")}</div>` : ""}
         <div class="ody-q">${esc(st.q)}</div>
         ${st.q_en ? `<div class="ody-sub-en">${esc(st.q_en)}</div>` : ""}
         <div class="ody-choices">${choicesHtml(st)}</div>
+      </div>`;
+    },
+    dossier(st) {
+      const docs = st.docs || [];
+      const activeIdx = clamp(st._docIdx || 0, 0, Math.max(0, docs.length - 1));
+      const curDoc = docs[activeIdx] || { title: "Document", source: "", text: "" };
+      const c = CH();
+      if (!st._text && c.dossierDrafts && c.dossierDrafts[st.dossierId] && c.dossierDrafts[st.dossierId].text) {
+        st._text = c.dossierDrafts[st.dossierId].text;
+      }
+      const txt = st._text || "";
+      const wc = words(txt).length;
+      const minW = st.minWords || 700;
+      const pct = Math.min(100, Math.round((wc / minW) * 100));
+      const totalDocWords = docs.reduce((acc, d) => acc + words(d.text || "").length, 0);
+      return `<div class="ody-dossier-wrap">
+        <div class="ody-k-label">📑 DALF C2 · ${esc(st.domain || "Production Écrite")} · ${docs.length} documents (${totalDocWords} mots) → ${minW} mots</div>
+        <h3 style="margin:.15rem 0 .45rem">${esc(st.title)}</h3>
+        <div class="ody-dossier-task">${esc(st.role ? st.role + " — " : "")}${esc(st.task || "")}</div>
+        <div class="ody-dossier-split">
+          <div class="ody-dossier-docs">
+            <div class="ody-dossier-doc-tabs" role="tablist">
+              ${docs.map((d, i) => `<button type="button" class="ody-dossier-doc-tab ${i === activeIdx ? "active" : ""}" data-a="dossierdoc" data-i="${i}">Doc ${i + 1}${d.tag ? " · " + esc(d.tag.replace(/^Document \d+\s*·\s*/i, "")) : ""}</button>`).join("")}
+            </div>
+            <div class="ody-dossier-doc-meta"><b>${esc(curDoc.title)}</b> · ${esc(curDoc.source || "")}</div>
+            <div class="ody-dossier-doc-body" lang="fr" translate="no">
+              <p>${esc(curDoc.text || "").replace(/\n\n+/g, "</p><p>").replace(/\n/g, "<br>")}</p>
+            </div>
+          </div>
+          <div class="ody-dossier-editor">
+            <div class="ody-dossier-wc ${wc >= minW ? "ok" : ""}" id="ody-dos-wc-wrap">
+              <span id="ody-dos-wc">${wc} / ${minW} ${ui("words", "mots")} (${pct}%)</span>
+              <i class="pbar"><b id="ody-dos-bar" style="width:${pct}%"></b></i>
+              <small id="ody-dos-saved" class="ody-mini">💾 ${ui("Auto-saved", "Sauvegardé")}</small>
+            </div>
+            <textarea class="ody-ta" id="ody-dossier-ta" rows="14" spellcheck="false" lang="fr" placeholder="${ui("Write your structured 700+ word French synthesis here (Problématique → I → II → Conclusion)…", "Rédigez votre synthèse structurée en français (700+ mots : Problématique → I → II → Conclusion)…")}">${esc(txt)}</textarea>
+            ${accentBar("ody-dossier-ta")}
+            ${(st.rubricPoints || []).length ? `<details class="ody-passage" style="margin-top:.5rem"><summary>📋 ${ui("DALF C2 50-pt Rubric Checklist", "Grille officielle DALF C2 (/50)")}</summary><ul class="ody-must">${st.rubricPoints.map((p) => `<li>${esc(p)}</li>`).join("")}</ul></details>` : ""}
+            <div id="ody-grade"></div>
+          </div>
+        </div>
+      </div>`;
+    },
+    jury(st) {
+      st._turns = Array.isArray(st._turns) ? st._turns : [{ role: "jury", fr: (st.juryOpenings && st.juryOpenings[0]) || "Nous vous écoutons pour votre exposé, puis nous débattrons ensemble." }];
+      const userCount = st._turns.filter((t) => t.role === "user").length;
+      const targetT = st.targetTurns || 6;
+      const elapsed = st._t0 ? Math.max(0, Math.round((Date.now() - st._t0) / 1000)) : 0;
+      const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+      const ss = String(elapsed % 60).padStart(2, "0");
+      return `<div class="ody-jury-stage">
+        <div class="ody-jury-head">
+          <div>
+            <div class="ody-k-label">⚖️ ${ui("Live Adversarial DALF C2 Jury Debate", "Débat Contradictoire · Jury DALF C2")}</div>
+            <h3 style="margin:.1rem 0">${esc(st.title)}</h3>
+            <div class="ody-mini">${esc(st.juryPersona || "Jury Sorbonne C2")} · ${ui(`Turn ${userCount}/${targetT}`, `Tour ${userCount}/${targetT}`)} · ⏱ <span id="ody-jury-clock">${mm}:${ss}</span></div>
+          </div>
+        </div>
+        ${st.exposePrompt ? `<div class="ody-dossier-task">🎯 ${esc(st.exposePrompt)}</div>` : ""}
+        <div class="ody-jury-chat" id="ody-jury-chat" lang="fr" translate="no">
+          ${st._turns.map((t) => `<div class="ody-jury-msg ${t.role}">
+            <div class="jm-who">${t.role === "jury" ? "🏛️ Jury" : "🎙️ Vous"}</div>
+            <div class="jm-fr">${esc(t.fr)} ${t.role === "jury" ? `<button type="button" class="ody-btn tiny ghost" data-a="say" data-t="${esc(t.fr)}">🔊</button>` : ""}</div>
+            ${t.en && isEnGuide() ? `<div class="jm-en">${esc(t.en)}</div>` : ""}
+          </div>`).join("")}
+        </div>
+        <div class="ody-jury-controls">
+          <button type="button" class="ody-btn mic" id="ody-jury-mic" data-a="jurymic">🎙️ ${ui("Speak Aloud", "Parler")}</button>
+          <textarea class="ody-input small" id="ody-jury-in" rows="2" spellcheck="false" lang="fr" placeholder="${ui("Speak via mic or formulate your French rebuttal…", "Répondez au micro ou formulez votre réplique nuancée en français…")}"></textarea>
+          <button type="button" class="ody-btn primary" id="ody-jury-send" data-a="jurysend">${ui("Reply ▸", "Répondre ▸")}</button>
+        </div>
+        <div id="ody-grade"></div>
       </div>`;
     },
     enquete(st) {
@@ -5914,12 +6430,74 @@
       if ($("ody-sim-kw") && st._val) markKeywords(st, st._val);
       focusIn();
     },
-    speak(st) { foot(`<button class="ody-btn ghost" data-a="skipspeak">🔇 Can't speak now</button>`); if (CH().autoAudio) speak(st.fr); },
+    speak(st) {
+      const strictGate = !!(SES && SES.exam && cefrRank(SES.node ? SES.node.level : currentLevel()) >= 2) || !!st.strictVoice;
+      foot(strictGate ? `<span class="ody-foot-hint">🎙️ ${ui("Official Exam: live microphone speaking required", "Épreuve officielle : prise de parole au micro requise")}</span>` : `<button class="ody-btn ghost" data-a="skipspeak">🔇 ${ui("Quiet Mode (Skip Mic)", "Mode Silencieux (Passer)")}</button>`);
+      if (CH().autoAudio) speak(st.fr);
+    },
     match() { foot(`<span class="ody-foot-hint">Tap a French phrase, then its meaning</span>`); },
     dialogue(st) { foot(`<span class="ody-foot-hint">Keys 1–${st.options.length}</span>`); setTimeout(() => speak(st.npc), 250); },
     quest(st) { foot(`<span class="ody-foot-hint">Touches 1–${(st.options || []).length} · Choisissez le registre adapté</span>`); setTimeout(() => speak(st.npc), 220); },
     register(st) { foot(`<span class="ody-foot-hint">Touches 1–${(st.choices || []).length} · Identifiez la nuance exacte</span>`); if (st.fr && CH().autoAudio) setTimeout(() => speak(st.fr), 220); },
-    radio(st) { foot(`<span class="ody-foot-hint">📻 Écoutez l'émission puis répondez (1–${(st.choices || []).length})</span>`); setTimeout(() => speak(st.audioText || st.fr), 240); },
+    radio(st) {
+      foot(`<span class="ody-foot-hint">📻 ${ui("Listen to the broadcast, take notes, then answer", "Écoutez l'émission, prenez des notes puis répondez")} (1–${(st.choices || []).length})</span>`);
+      const notesEl = $("ody-radio-notes");
+      if (notesEl) notesEl.addEventListener("input", () => { st._notes = notesEl.value; });
+      const aud = $("ody-radio-audio");
+      if (aud && st.audioUrl && !st._useFallback) {
+        aud.playbackRate = st._rate || 1;
+        let loaded = false;
+        aud.addEventListener("loadedmetadata", () => { loaded = true; });
+        aud.addEventListener("canplay", () => { loaded = true; });
+        aud.addEventListener("error", () => {
+          if (!st._useFallback) { st._useFallback = true; renderStep(); }
+        });
+        STEP_TIMERS.tos.push(setTimeout(() => {
+          if (!loaded && aud.readyState === 0 && !st._useFallback) { st._useFallback = true; renderStep(); }
+        }, 6000));
+      } else {
+        STEP_TIMERS.tos.push(setTimeout(() => speak(st.audioText || st.fr), 240));
+      }
+    },
+    dossier(st) {
+      foot(`<button class="ody-btn primary" data-a="dossiersubmit" id="ody-primary">✓ ${ui("Submit for DALF C2 Grading", "Soumettre au Jury DALF C2")}</button>`);
+      const ta = $("ody-dossier-ta");
+      const minW = st.minWords || 700;
+      const syncDos = () => {
+        if (!ta) return;
+        st._text = ta.value;
+        const n = words(ta.value).length;
+        const pct = Math.min(100, Math.round((n / minW) * 100));
+        const wcEl = $("ody-dos-wc"), barEl = $("ody-dos-bar"), wrapEl = $("ody-dos-wc-wrap");
+        if (wcEl) wcEl.textContent = `${n} / ${minW} ${ui("words", "mots")} (${pct}%)`;
+        if (wrapEl) wrapEl.classList.toggle("ok", n >= minW);
+        if (barEl) barEl.style.width = `${pct}%`;
+      };
+      if (ta) { ta.addEventListener("input", syncDos); syncDos(); }
+      STEP_TIMERS.ivs.push(setInterval(() => {
+        if (!ta || !st.dossierId) return;
+        const c = CH();
+        c.dossierDrafts = c.dossierDrafts || {};
+        c.dossierDrafts[st.dossierId] = { text: ta.value, savedAt: Date.now() };
+        persist();
+        const sv = $("ody-dos-saved");
+        if (sv) sv.textContent = `💾 ${ui("Saved", "Sauvegardé")} ${new Date().toLocaleTimeString().slice(0, 5)}`;
+      }, 5000));
+    },
+    jury(st) {
+      if (!st._t0) st._t0 = Date.now();
+      const userCount = (st._turns || []).filter((t) => t.role === "user").length;
+      const canFinish = userCount >= (st.minTurns || 4);
+      foot(`${canFinish ? `<button class="ody-btn primary" data-a="juryfinish" id="ody-primary">✓ ${ui("Conclude & Grade Debate", "Conclure & Noter l'Oral")}</button>` : `<span class="ody-foot-hint">⚖️ ${ui(`Complete at least ${st.minTurns || 4} live turns with the Jury (${userCount}/${st.minTurns || 4})`, `Complétez au moins ${st.minTurns || 4} échanges avec le Jury (${userCount}/${st.minTurns || 4})`)}</span>`}`);
+      STEP_TIMERS.ivs.push(setInterval(() => {
+        const cl = $("ody-jury-clock");
+        if (!cl || !st._t0) return;
+        const el = Math.max(0, Math.round((Date.now() - st._t0) / 1000));
+        cl.textContent = `${String(Math.floor(el / 60)).padStart(2, "0")}:${String(el % 60).padStart(2, "0")}`;
+      }, 1000));
+      const box = $("ody-jury-chat");
+      if (box) box.scrollTop = box.scrollHeight;
+    },
     enquete(st) { foot(`<span class="ody-foot-hint">🕵️ Touches 1–${(st.segments || []).length} · Touchez le segment contenant l'erreur</span>`); },
     liaison(st) { foot(`<span class="ody-foot-hint">👄 Touches 1–${(st.choices || []).length} · Écoutez la prosodie et identifiez la liaison</span>`); if (st.fr) setTimeout(() => speak(st.fr), 220); },
     forgeron(st) { foot(`<span class="ody-foot-hint">⚒️ Touches 1–${(st.choices || []).length} · Frappez la forme conjuguée exacte</span>`); },
@@ -5946,9 +6524,14 @@
       const ta = $("ody-ta"); if (ta) { ta.addEventListener("input", () => updWc(st)); updWc(st, true); setTimeout(() => ta.focus(), 50); }
     },
     speakfree(st) {
-      foot(`<button class="ody-btn ghost" data-a="skipspeakfree">🔇 Passer</button><button class="ody-btn primary" data-a="sfsubmit" id="ody-primary">✓ Valider ma prise de parole</button>`);
+      const strictGate = !!(SES && SES.exam && cefrRank(SES.node ? SES.node.level : currentLevel()) >= 2) || !!st.strictVoice;
+      foot(`${strictGate ? "" : `<button class="ody-btn ghost" data-a="skipspeakfree">🔇 ${ui("Quiet Mode", "Mode Silencieux")}</button>`}<button class="ody-btn primary" data-a="sfsubmit" id="ody-primary">✓ ${ui("Submit Speaking", "Valider ma prise de parole")}</button>`);
       const ta = $("ody-sf-ta");
       if (ta) {
+        if (strictGate && micSupported()) {
+          ta.readOnly = true;
+          ta.placeholder = ui("Official Exam: use the microphone button above to speak aloud…", "Épreuve officielle : utilisez le bouton micro ci-dessus pour parler à voix haute…");
+        }
         const minW = Math.max(12, Math.round((st.seconds || 45) * 0.45));
         const syncSf = (skipSave) => {
           st._transcript = ta.value;
@@ -6705,8 +7288,183 @@
       resolve(false, { answer: ans, why: st.wrong || "", title: "No problem — here's the answer", q: st.q || st.en || stripTags(st.qHtml || "") });
     },
     cantlisten() { const st = cur(); if (SES.answered) return; SES.answered = true; foot(`<span class="ody-foot-hint">Skipped — the text was: <b>${esc(st.fr)}</b></span>${btnCont()}`); },
-    skipspeak() { if (SES.answered) return; SES.answered = true; next(); },
-    skipspeakfree() { const st = cur(); st._score = null; SES.answered = true; if (st.sec) SES.secs[st.sec] = { n: 1, ok: 0 }; next(); },
+    skipspeak() {
+      if (SES.answered) return;
+      if (SES.exam && cefrRank(SES.node ? SES.node.level : currentLevel()) >= 2) {
+        toast("🎙️ Microphone Required", "Official level exams require live speaking.", "🎙️");
+        return;
+      }
+      SES.usedQuietMode = true;
+      SES.answered = true;
+      next();
+    },
+    skipspeakfree() {
+      const st = cur();
+      if (SES.exam && cefrRank(SES.node ? SES.node.level : currentLevel()) >= 2) {
+        toast("🎙️ Microphone Required", "Official level exams require live speaking.", "🎙️");
+        return;
+      }
+      SES.usedQuietMode = true;
+      st._score = null;
+      SES.answered = true;
+      if (st.sec) SES.secs[st.sec] = { n: 1, ok: 0 };
+      next();
+    },
+    radioseek(el) {
+      const aud = $("ody-radio-audio");
+      const d = +(el && el.dataset && el.dataset.d || 0);
+      if (aud && !isNaN(aud.currentTime)) aud.currentTime = Math.max(0, (aud.currentTime || 0) + d);
+    },
+    radiorate(el) {
+      const st = cur();
+      const r = +(el && el.dataset && el.dataset.r || 1);
+      st._rate = r;
+      const aud = $("ody-radio-audio");
+      if (aud) aud.playbackRate = r;
+      document.querySelectorAll('[data-a="radiorate"]').forEach((b) => {
+        b.classList.toggle("primary", +b.dataset.r === r);
+        b.classList.toggle("ghost", +b.dataset.r !== r);
+      });
+    },
+    async radioplaydebate() {
+      const st = cur();
+      const deb = st && st.fallbackDebate;
+      if (!deb || !Array.isArray(deb.segments) || !deb.segments.length) return speak(st.audioText || st.fr);
+      stopAudio();
+      const my = AUDIO.token;
+      for (const seg of deb.segments.slice(0, 6)) {
+        if (my !== AUDIO.token) break;
+        const spInfo = (deb.speakers || []).find((x) => x.name === seg.sp);
+        await speak(seg.text, (spInfo && spInfo.rate) || 1);
+      }
+    },
+    dossierdoc(el) {
+      const st = cur();
+      const ta = $("ody-dossier-ta");
+      if (ta) st._text = ta.value;
+      st._docIdx = +(el && el.dataset && el.dataset.i || 0);
+      renderStep();
+    },
+    async dossiersubmit() {
+      const st = cur();
+      const ta = $("ody-dossier-ta");
+      if (!ta || st._busy) return;
+      const text = ta.value.trim();
+      const n = words(text).length;
+      const minW = st.minWords || 700;
+      const g = $("ody-grade");
+      if (n < Math.min(20, minW)) {
+        if (g) g.innerHTML = `<div class="warn">${ui(`Please write at least ${minW} words in French (currently ${n}).`, `Rédigez au moins ${minW} mots en français (actuellement ${n}).`)}</div>`;
+        return;
+      }
+      st._busy = true; st._text = text;
+      if (g) g.innerHTML = `<div class="ody-grading">📑 ${ui("DALF C2 Examiner grading your multi-document synthesis…", "Évaluation par le Jury DALF C2 en cours…")}</div>`;
+      const localEval = evaluateFrenchLocal(text, { minWords: minW, keyConcepts: st.keyConcepts || [], rhetCount: analyzeRhetoricLocal(text, st).hitMetrics.length });
+      let ai = null;
+      await checkServer();
+      if (SRV.ai && !localEval.gibberish && !localEval.notFrench) {
+        const r = await aiGrade({ kind: "write", level: "C2", rubric: "dalf_c2", prompt: `${st.title} — ${st.task}`, text, criteria: st.rubricPoints || [] });
+        if (r && r.ok) ai = r.data;
+      }
+      let score = (ai && typeof ai.score === "number") ? clamp(Math.round(ai.score), 0, 100) : localEval.score;
+      if (n < minW && !ai) score = Math.min(score, Math.round((n / minW) * 58));
+      st._busy = false; st._graded = true; st._score = score; st._ai = ai;
+      const c = CH();
+      c.dossierDrafts = c.dossierDrafts || {};
+      c.dossierDrafts[st.dossierId] = { text, savedAt: Date.now() };
+      const passed = score >= 50 && n >= minW;
+      if (passed) {
+        c.c2Readiness = c.c2Readiness || {};
+        c.c2Readiness.writing = { passed: true, score, words: n, date: today() };
+      }
+      skillAdd(["writing", "reading", "grammar"], passed, "C2");
+      SES.wrote += 1;
+      SES.xp += Math.round(35 + score / 2);
+      if (g) {
+        const reasonNote = (!ai && localEval.reason) ? `<div class="warn" style="margin:.4rem 0">${esc(localEval.reason)}</div>` : "";
+        g.innerHTML = reasonNote + gradeHtml(score, ai, text, "write", st);
+      }
+      SES.answered = true;
+      passed ? SFX.win() : SFX.bad();
+      persist();
+      foot(`<button class="ody-btn ghost" data-a="dossieredit">✏️ ${ui("Revise Essay", "Reprendre la rédaction")}</button>${btnCont()}`);
+    },
+    dossieredit() { const st = cur(); st._graded = false; SES.answered = false; renderStep(); },
+    jurymic() {
+      const inp = $("ody-jury-in"), btn = $("ody-jury-mic");
+      if (!micSupported()) { toast("🎙️ Mic Unavailable", MIC_ERR.unsupported, "🎙️"); return; }
+      if (btn) btn.classList.add("on");
+      micListen({
+        onInterim: (t) => { if (inp) inp.value = t; },
+        onError: () => { if (btn) btn.classList.remove("on"); },
+        onFinal: (alts) => {
+          if (btn) btn.classList.remove("on");
+          if (alts && alts[0] && inp) { inp.value = (inp.value ? inp.value + " " : "") + alts[0]; }
+        }
+      });
+    },
+    async jurysend() {
+      const st = cur();
+      const inp = $("ody-jury-in");
+      if (!inp || st._busy) return;
+      const msg = inp.value.trim();
+      if (!msg) return;
+      inp.value = "";
+      st._turns = st._turns || [];
+      st._turns.push({ role: "user", fr: msg });
+      st._busy = true;
+      renderStep();
+      let replyFr = "", replyEn = "";
+      const userCount = st._turns.filter((t) => t.role === "user").length;
+      try {
+        const convo = st._turns.slice(-8).map((t) => `${t.role === "user" ? "Candidat" : "Jury"}: ${t.fr}`).join("\n");
+        const sys = `Tu es ${st.juryPersona || "membre du jury DALF C2"}. Mène un débat contradictoire exigeant mais courtois en français soutenu sur « ${st.title} ». Interromps poliment, pointe une limite ou demande une nuance concrète en 1–2 phrases.`;
+        const r = await callAI("/api/partner", { mode: "jury", system: sys, conversation: convo });
+        if (r && r.ok && r.data && r.data.reply_fr) {
+          replyFr = r.data.reply_fr;
+          replyEn = r.data.reply_en || "";
+        }
+      } catch (e) {}
+      if (!replyFr) {
+        const pbs = st.juryPushbacks || [];
+        replyFr = pbs[(userCount - 1) % Math.max(1, pbs.length)] || "C'est un argument intéressant, mais comment répondez-vous à ceux qui soulignent les limites économiques de cette approche ?";
+      }
+      st._turns.push({ role: "jury", fr: replyFr, en: replyEn });
+      st._busy = false;
+      renderStep();
+      if (CH().autoAudio) speak(replyFr);
+    },
+    async juryfinish() {
+      const st = cur();
+      if (st._busy) return;
+      const allUser = (st._turns || []).filter((t) => t.role === "user").map((t) => t.fr).join(" ");
+      const localEval = evaluateFrenchLocal(allUser, { minWords: 45 });
+      st._busy = true;
+      const g = $("ody-grade");
+      if (g) g.innerHTML = `<div class="ody-grading">⚖️ ${ui("Grading your DALF C2 Jury Debate…", "Délibération du Jury DALF C2 en cours…")}</div>`;
+      let ai = null;
+      await checkServer();
+      if (SRV.ai && !localEval.gibberish && !localEval.notFrench) {
+        const r = await aiGrade({ kind: "speak", level: "C2", rubric: "dalf_c2", prompt: st.title + " — " + (st.exposePrompt || ""), text: allUser, criteria: st.outlineHints || [] });
+        if (r && r.ok) ai = r.data;
+      }
+      const score = (ai && typeof ai.score === "number") ? clamp(Math.round(ai.score), 0, 100) : localEval.score;
+      st._busy = false; st._graded = true; st._score = score;
+      const passed = score >= 50 && !localEval.gibberish && !localEval.notFrench;
+      if (passed) {
+        const c = CH();
+        c.c2Readiness = c.c2Readiness || {};
+        c.c2Readiness.jury = { passed: true, score, turns: (st._turns || []).filter((t) => t.role === "user").length, date: today() };
+      }
+      skillAdd(["speaking", "listening"], passed, "C2");
+      SES.spoke += (st._turns || []).filter((t) => t.role === "user").length;
+      SES.xp += Math.round(35 + score / 2);
+      if (g) g.innerHTML = gradeHtml(score, ai, allUser, "speak", st);
+      SES.answered = true;
+      passed ? SFX.win() : SFX.bad();
+      persist();
+      foot(btnCont());
+    },
     mt(el) {
       const st = cur(); if (SES.answered) return;
       const side = el.dataset.s, i = +el.dataset.i;
@@ -6797,33 +7555,93 @@
       const a = out.querySelector("audio"); if (a) { a.onended = () => speak(st.fr); a.play().catch(() => {}); }
     } catch (e) { out.innerHTML = `<span class="warn">${MIC_ERR["not-allowed"]}</span>`; }
   }
+  function mergeDedupTranscript(base, chunk) {
+    const a = String(base || "").trim(), b = String(chunk || "").trim();
+    if (!b) return a;
+    if (!a) return b;
+    const aw = a.split(/\s+/), bw = b.split(/\s+/);
+    const maxOv = Math.min(8, aw.length, bw.length);
+    for (let k = maxOv; k >= 2; k--) {
+      if (normLoose(aw.slice(-k).join(" ")) === normLoose(bw.slice(0, k).join(" "))) {
+        return (a + " " + bw.slice(k).join(" ")).trim();
+      }
+    }
+    return (a + " " + b).trim();
+  }
+  function blobToBase64(blob) {
+    return new Promise((resolve) => {
+      try {
+        const r = new FileReader();
+        r.onloadend = () => {
+          const s = String(r.result || "");
+          const idx = s.indexOf(",");
+          resolve(idx >= 0 ? s.slice(idx + 1) : "");
+        };
+        r.onerror = () => resolve("");
+        r.readAsDataURL(blob);
+      } catch (e) { resolve(""); }
+    });
+  }
   function speakFreeMic(st) {
-    if (st._rec) { micStop(); return; }
+    if (st._rec || st._mediaRec) { st._stop = true; micStop(); try { st._mediaRec && st._mediaRec.state !== "inactive" && st._mediaRec.stop(); } catch (e) {} return; }
     const btn = $("ody-mic-btn"), live = $("ody-sf-live"), tm = $("ody-sf-timer"), ta = $("ody-sf-ta");
     if (!micSupported()) return speakFreeRecord(st);
     st._t0 = Date.now(); st._transcript = ta && ta.value.trim() ? ta.value.trim() : "";
-    btn.classList.add("on"); btn.querySelector("small").textContent = "Tap to stop";
-    const tick = setInterval(() => { if (!tm) return; const s = Math.round((Date.now() - st._t0) / 1000); tm.innerHTML = `⏱ ${s}s / ${st.seconds || 45}s`; if (s >= (st.seconds || 45) + 30) micStop(); }, 500);
-    let restarts = 0;
+    btn.classList.add("on"); btn.querySelector("small").textContent = ui("Tap to stop", "Appuyer pour arrêter");
+    const maxSec = (st.seconds || 45) + 45;
+    const tick = setInterval(() => {
+      if (!tm) return;
+      const s = Math.round((Date.now() - st._t0) / 1000);
+      tm.innerHTML = `⏱ ${s}s / ${st.seconds || 45}s`;
+      if (s >= maxSec) { st._stop = true; micStop(); }
+    }, 500);
+    // Optional parallel low-bitrate Opus MediaRecorder for 1-tap playback & Gemini multimodal accent grading (Android exclusive-focus safe!)
+    let recStream = null, recChunks = [];
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder) {
+      navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+        if (st._stop) { stream.getTracks().forEach((t) => t.stop()); return; }
+        recStream = stream;
+        const mime = MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "";
+        const mr = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 24000 } : { audioBitsPerSecond: 24000 });
+        st._mediaRec = mr;
+        mr.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
+        mr.onstop = async () => {
+          st._mediaRec = null;
+          if (recStream) recStream.getTracks().forEach((t) => t.stop());
+          if (recChunks.length) {
+            const blob = new Blob(recChunks, { type: mr.mimeType || "audio/webm" });
+            st._audioUrl = URL.createObjectURL(blob);
+            if (blob.size <= 3_500_000) {
+              st._audioB64 = await blobToBase64(blob);
+              st._audioMime = blob.type || "audio/webm";
+            }
+          }
+        };
+        mr.start(1000);
+      }).catch(() => { /* Graceful Android dual-focus fallback: continue cleanly with SpeechRecognition */ });
+    }
     const startRec = () => {
       st._rec = micListen({
         continuous: true,
         onInterim: (t) => {
-          const full = (st._transcript + " " + t).trim();
+          const full = mergeDedupTranscript(st._transcript, t);
           if (live) live.textContent = full;
           if (ta) { ta.value = full; ta.dispatchEvent(new Event("input")); }
           markKeywords(st, full);
         },
         onError: (code) => { if (code !== "no-speech" && code !== "aborted") { if (live) live.innerHTML = `<span class="warn">${esc(MIC_ERR[code] || code)}</span>`; st._fatal = true; } },
         onFinal: (alts) => {
-          st._transcript = (st._transcript + " " + (alts[0] || "")).trim();
+          st._transcript = mergeDedupTranscript(st._transcript, (alts && alts[0]) || "");
           if (ta) { ta.value = st._transcript; ta.dispatchEvent(new Event("input")); }
         },
         onEnd: () => {
           const s = (Date.now() - st._t0) / 1000;
-          if (!st._stop && !st._fatal && s < (st.seconds || 45) + 30 && restarts < 12) { restarts += 1; startRec(); return; }
-          clearInterval(tick); st._rec = null; btn.classList.remove("on"); btn.querySelector("small").textContent = "Reprendre le micro";
-          gradeSpeakFree(st);
+          // No restarts < 12 cap: supports full 10-min DALF C2 exposés on Android Chrome!
+          if (!st._stop && !st._fatal && s < maxSec) { startRec(); return; }
+          clearInterval(tick); st._rec = null;
+          try { if (st._mediaRec && st._mediaRec.state !== "inactive") st._mediaRec.stop(); } catch (e) {}
+          btn.classList.remove("on"); btn.querySelector("small").textContent = ui("Resume Mic", "Reprendre le micro");
+          setTimeout(() => gradeSpeakFree(st), 180);
         }
       });
     };
@@ -6840,15 +7658,34 @@
   }
   async function speakFreeRecord(st) {
     const live = $("ody-sf-live");
-    if (!navigator.mediaDevices || !window.MediaRecorder) { if (live) live.innerHTML = `<span class="warn">${MIC_ERR.unsupported} — utilisez la Tribune Oratoire ci-dessous !</span>`; return; }
+    if (!navigator.mediaDevices || !window.MediaRecorder) { if (live) live.innerHTML = `<span class="warn">${MIC_ERR.unsupported}</span>`; return; }
     if (live) live.innerHTML = `<span class="listening">🔴 Recording ${st.seconds || 45}s…</span>`;
     try {
-      const url = await recordClip(st.seconds || 45);
-      if (live) live.innerHTML = `<div class="ody-rec">Your answer: <audio controls src="${url}"></audio></div>`;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "";
+      const mr = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 24000 } : { audioBitsPerSecond: 24000 });
+      const chunks = [];
+      mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+      const done = new Promise((r) => (mr.onstop = r));
+      mr.start();
+      setTimeout(() => { if (mr.state !== "inactive") mr.stop(); }, (st.seconds || 45) * 1000);
+      await done;
+      stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
+      const url = URL.createObjectURL(blob);
+      st._audioUrl = url;
+      st._audioB64 = await blobToBase64(blob);
+      st._audioMime = blob.type || "audio/webm";
+      if (live) live.innerHTML = `<div class="ody-rec"><span>🎙️ ${ui("Your recording:", "Votre voix :")}</span> <audio controls src="${url}"></audio></div>`;
       showSpeakModel(st);
-      foot(`<button class="ody-btn ghost" data-a="selfagain">🔁 Try again</button><button class="ody-btn primary" data-a="sfselfok" id="ody-primary">✅ I covered the task</button>`);
-      ACT.sfselfok = () => { st._score = 75; st._graded = true; if (st.sec) SES.secs[st.sec] = { n: 1, ok: 0.75 }; SES.xp += 25; skillAdd("speaking", true); SES.answered = true; savePartial(true); foot(btnCont()); };
-    } catch (e) { if (live) live.innerHTML = `<span class="warn">${MIC_ERR["not-allowed"]} — utilisez la Tribune Oratoire ci-dessous !</span>`; }
+      // No blind 75/100 self-check: submit recorded audio to AI grader (or require transcript if offline)
+      await checkServer();
+      if (SRV.ai) {
+        gradeSpeakFree(st);
+      } else {
+        foot(`<button class="ody-btn ghost" data-a="selfagain">🔁 ${ui("Record again", "Réenregistrer")}</button><button class="ody-btn primary" data-a="sfsubmit" id="ody-primary">✓ ${ui("Grade Transcript", "Évaluer")}</button>`);
+      }
+    } catch (e) { if (live) live.innerHTML = `<span class="warn">${MIC_ERR["not-allowed"]}</span>`; }
   }
   function showSpeakModel(st) {
     const g = $("ody-grade"); if (!g || !st.model_fr) return;
@@ -6862,29 +7699,43 @@
     const text = (st._transcript || "").trim();
     const g = $("ody-grade"); if (!g) return;
     const n = words(text).length;
-    if (n < 4) { g.innerHTML = `<div class="warn">Votre prise de parole compte seulement ${n} mot${n === 1 ? "" : "s"}. Parlez au micro ou composez au moins 1 phrase complète dans la Tribune Oratoire ci-dessus.</div>`; return; }
+    if (n < 4 && !st._audioB64) { g.innerHTML = `<div class="warn">${ui(`Only ${n} word(s) detected. Speak at least one complete French sentence.`, `Votre prise de parole compte seulement ${n} mot${n === 1 ? "" : "s"}. Parlez au micro au moins 1 phrase complète.`)}</div>`; return; }
     st._busy = true;
-    const kws = st.keywords || []; const tN = " " + normLoose(text) + " ";
-    const hit = kws.filter((k) => tN.includes(normLoose(k))).length;
     const localRhet = analyzeRhetoricLocal(text, st);
     const targetWords = Math.max(8, Math.round((st.seconds || 35) * 0.45));
-    let score = Math.round(clamp((kws.length ? hit / kws.length : 0.7) * 42 + clamp(n / targetWords, 0, 1.15) * 46 + Math.min(18, localRhet.hitMetrics.length * 6), 45, 98));
-    g.innerHTML = `<div class="ody-grading">🎙️ Analyse prosodique et rhétorique du Grand Oral…</div>`;
+    const localEval = evaluateFrenchLocal(text, { minWords: targetWords, keywords: st.keywords || [], rhetCount: localRhet.hitMetrics.length });
+    let score = localEval.score;
+    g.innerHTML = `<div class="ody-grading">🎙️ ${ui("Analyzing pronunciation & fluency…", "Analyse prosodique et rhétorique du Grand Oral…")}</div>`;
     let ai = null;
     await checkServer();
-    if (SRV.ai) { const r = await aiGrade({ kind: "speak", level: st.level, prompt: st.prompt_fr || st.prompt_en, text, model: st.model_fr, criteria: (st.keywords || []).map((k) => "Uses «" + k + "» or an equivalent") }); if (r && r.ok) ai = r.data; }
+    if (SRV.ai && (!localEval.gibberish || st._audioB64)) {
+      const r = await aiGrade({
+        kind: "speak",
+        level: st.level,
+        prompt: st.prompt_fr || st.prompt_en,
+        text,
+        model: st.model_fr,
+        criteria: (st.keywords || []).map((k) => "Uses «" + k + "» or an equivalent"),
+        audioBase64: st._audioB64 || undefined,
+        audioMime: st._audioMime || undefined
+      });
+      if (r && r.ok) ai = r.data;
+    }
     if (ai && typeof ai.score === "number") score = clamp(Math.round(ai.score), 0, 100);
     st._busy = false; st._score = score; st._graded = true; st._rhet = localRhet;
-    if (st.sec) SES.secs[st.sec] = { n: 1, ok: Math.max(score, 60) / 100 };
+    // ZERO Math.max(score, 60) fake pass floor!
+    if (st.sec) SES.secs[st.sec] = { n: 1, ok: score / 100 };
     skillAdd(["speaking", "pronunciation"], score >= 60); SES.spoke += 1;
-    const xp = Math.round(18 + score / 3); SES.xp += xp;
+    const xp = Math.round(14 + score / 3); SES.xp += xp;
     if (ta) ta.readOnly = true;
-    g.innerHTML = gradeHtml(score, ai, text, "speak", st);
+    const playbackHtml = st._audioUrl ? `<div class="ody-rec" style="margin:.45rem 0"><span>▶ ${ui("Hear Yourself:", "Votre voix :")}</span> <audio controls src="${st._audioUrl}"></audio></div>` : "";
+    const reasonHtml = (!ai && localEval.reason) ? `<div class="warn" style="margin:.4rem 0">${esc(localEval.reason)}</div>` : "";
+    g.innerHTML = playbackHtml + reasonHtml + gradeHtml(score, ai, text, "speak", st);
     showSpeakModel(st);
     SES.answered = true;
-    score >= 60 ? SFX.win() : SFX.ok();
+    score >= 60 ? SFX.win() : SFX.bad();
     savePartial(true);
-    foot(`<button class="ody-btn ghost" data-a="sfretry">🔁 Reformuler ma prise de parole</button>${btnCont()}`);
+    foot(`<button class="ody-btn ghost" data-a="sfretry">🔁 ${ui("Retry Speaking", "Reformuler ma prise de parole")}</button>${btnCont()}`);
     ACT.sfretry = () => { st._graded = false; SES.answered = false; renderStep(); };
   }
   function analyzeRhetoricLocal(text, st) {
@@ -6942,32 +7793,33 @@
     const ta = $("ody-ta"); if (!ta || st._busy) return;
     const text = ta.value.trim(); const n = words(text).length; const min = st.minWords || 20;
     const g = $("ody-grade");
-    if (n < Math.ceil(min * 0.6)) { g.innerHTML = `<div class="warn">Écrivez au moins ${Math.ceil(min * 0.6)} mots (vous en avez ${n}). Objectif : ${min} mots.</div>`; return; }
+    const strictMin = (st.exam || st.strictWords || cefrRank(st.level) >= 4) ? min : Math.ceil(min * 0.6);
+    if (n < strictMin) { g.innerHTML = `<div class="warn">${ui(`Write at least ${strictMin} words (currently ${n}). Target: ${min} words.`, `Écrivez au moins ${strictMin} mots (vous en avez ${n}). Objectif : ${min} mots.`)}</div>`; return; }
     st._busy = true; st._text = text;
-    g.innerHTML = `<div class="ody-grading">✒️ Analyse stylistique et rhétorique en cours…</div>`;
+    g.innerHTML = `<div class="ody-grading">✒️ ${ui("Evaluating your French writing…", "Analyse stylistique et rhétorique en cours…")}</div>`;
+    const localRhet = analyzeRhetoricLocal(text, st);
+    const localEval = evaluateFrenchLocal(text, { minWords: min, rhetCount: localRhet.hitMetrics.length });
     let ai = null;
     await checkServer();
-    if (SRV.ai) { const r = await aiGrade({ kind: "write", level: st.level, prompt: (st.prompt_fr || "") + " / " + (st.prompt_en || ""), text, model: st.model_fr, criteria: st.must_use || st.checklist || [] }); if (r && r.ok) ai = r.data; }
-    const localRhet = analyzeRhetoricLocal(text, st);
-    let score;
-    if (ai && typeof ai.score === "number") score = clamp(Math.round(ai.score), 0, 100);
-    else {
-      const lenScore = clamp(n / min, 0, 1.15) * 62;
-      const rhetBonus = Math.min(28, localRhet.hitMetrics.length * 8 + localRhet.metMusts.filter((m) => m.met).length * 5);
-      score = clamp(Math.round(lenScore + rhetBonus), 45, 96);
+    if (SRV.ai && !localEval.gibberish && !localEval.notFrench) {
+      const r = await aiGrade({ kind: "write", level: st.level, prompt: (st.prompt_fr || "") + " / " + (st.prompt_en || ""), text, model: st.model_fr, criteria: st.must_use || st.checklist || [] });
+      if (r && r.ok) ai = r.data;
     }
+    const score = (ai && typeof ai.score === "number") ? clamp(Math.round(ai.score), 0, 100) : localEval.score;
     st._busy = false; st._graded = true; st._score = score; st._ai = ai; st._rhet = localRhet;
-    if (st.sec) SES.secs[st.sec] = { n: 1, ok: (ai ? score : Math.max(score, 60)) / 100 };
+    // ZERO Math.max(score, 60) fake pass floor!
+    if (st.sec) SES.secs[st.sec] = { n: 1, ok: score / 100 };
     skillAdd(["writing", "grammar"], score >= 60); SES.wrote += 1;
-    SES.xp += Math.round(20 + score / 2.5);
-    if (st.atelierId) { const s = SAVE(); s.completedWritings = s.completedWritings || {}; s.completedWritings[st.atelierId] = true; }
+    SES.xp += Math.round(14 + score / 2.5);
+    if (st.atelierId && score >= 55) { const s = SAVE(); s.completedWritings = s.completedWritings || {}; s.completedWritings[st.atelierId] = true; }
     const c = CH(); c.portfolio = c.portfolio || []; c.portfolio.push({ date: today(), level: st.level, prompt: st.prompt_en || st.prompt_fr, text, score, ai: !!ai }); if (c.portfolio.length > 120) c.portfolio.shift();
-    g.innerHTML = gradeHtml(score, ai, text, "write", st);
+    const reasonHtml = (!ai && localEval.reason) ? `<div class="warn" style="margin:.4rem 0">${esc(localEval.reason)}</div>` : "";
+    g.innerHTML = reasonHtml + gradeHtml(score, ai, text, "write", st);
     if (!ai) ACT.showmodel();
     SES.answered = true; ta.readOnly = true;
-    score >= 60 ? SFX.win() : SFX.ok();
+    score >= 60 ? SFX.win() : SFX.bad();
     savePartial(true);
-    foot(`<button class="ody-btn ghost" data-a="writeedit">✏️ Affiner et soumettre à nouveau</button>${btnCont()}`);
+    foot(`<button class="ody-btn ghost" data-a="writeedit">✏️ ${ui("Edit & Resubmit", "Affiner et soumettre à nouveau")}</button>${btnCont()}`);
     ACT.writeedit = () => { st._graded = false; SES.answered = false; renderStep(); };
   }
   function gradeHtml(score, ai, text, kind, st) {
@@ -7046,14 +7898,30 @@
       setTimeout(() => toast(`🎁 Coffre de Maîtrise : +${gold} Or`, `${n.title} accompli avec succès !`, "🎁"), 600);
     }
     if (n && passedNode) {
-      c.done[n.id] = Math.max(c.done[n.id] || 0, stars);
+      c.done[n.id] = Math.max(c.done[n.id] || 0, S.usedQuietMode ? 1 : stars);
       c.plays[n.id] = (c.plays[n.id] || 0) + 1;
+      c.voicePending = c.voicePending || {};
+      if (S.usedQuietMode) {
+        c.voicePending[n.id] = true;
+      } else {
+        delete c.voicePending[n.id];
+      }
       const s = SAVE();
       if (n.stage) { s.clearedStages = s.clearedStages || {}; s.clearedStages[n.stage.stageId] = Math.max(s.clearedStages[n.stage.stageId] || 0, stars); s.tutorDone = s.tutorDone || {}; s.tutorDone[n.stage.stageId] = true; }
       if (n.kind === "boss" && n.world) { s.masteredLessons = s.masteredLessons || {}; s.masteredLessons[n.world.id] = true; s.stats = s.stats || {}; s.stats.bossesSlain = (s.stats.bossesSlain || 0) + 1; }
       if (n.kind === "boot" && n.data) { s.bootcamp = s.bootcamp || {}; s.bootcamp.done = s.bootcamp.done || {}; s.bootcamp.done[n.data.id] = true; }
       if (n.kind === "district" && n.data) { s.clearedDistricts = s.clearedDistricts || {}; s.clearedDistricts[n.data.id] = true; }
       if (n.kind === "atelier" && n.data) { s.completedWritings = s.completedWritings || {}; s.completedWritings[n.data.id] = true; }
+      if (n.kind === "chronique" && n.data) { c.chroniquesDone = c.chroniquesDone || {}; c.chroniquesDone[n.data.id] = true; }
+      if (n.kind === "sound" && n.data && n.data.accent_detox && !S.usedQuietMode) {
+        c.c2Readiness = c.c2Readiness || {};
+        c.c2Readiness.accentDetox = c.c2Readiness.accentDetox || {};
+        c.c2Readiness.accentDetox[n.data.id] = true;
+      }
+      if (n.kind === "radio" && cefrRank(n.cefr) >= 4) {
+        c.c2Readiness = c.c2Readiness || {};
+        c.c2Readiness.listening = { passed: true, score: Math.round(acc * 100), date: today() };
+      }
     }
     if (S.mode === "review") { c.lastReview = today(); }
     if (S.mode && String(S.mode).startsWith("chronique_") && passedSession) {
@@ -7118,21 +7986,21 @@
     const st = "⭐".repeat(r.stars) + `<span class="dim">${"☆".repeat(3 - r.stars)}</span>`;
     const isMicro = !!(r.microCap && r.node);
     const mp = r.microProgress || (r.node ? nodeMicroProgress(r.node) : null);
-    const stampHtml = r.passedSession ? `<div class="ody-mission-stamp"><span>🏆 MISSION ACCOMPLIE</span>${r.heatMult > 1 ? `<span class="stamp-heat">🔥 HEAT ×${r.heatMult}</span>` : ""}</div>` : "";
-    let head = `${stampHtml}<h2>${r.mode === "quick60" ? "⚡ Capsule Express 60s accomplie !" : isMicro && mp && !mp.allDone ? `⚡ ${esc(r.microCap.title)} verrouillée ! (${mp.doneCount}/${mp.total})` : r.mode === "review" ? "Review complete!" : r.node && r.node.kind === "boss" ? "Boss defeated!" : "Session complete!"}</h2><div class="ody-stars">${st}</div>`;
+    const stampHtml = r.passedSession ? `<div class="ody-mission-stamp"><span>🏆 ${ui("STEP COMPLETE", "MISSION ACCOMPLIE")}</span>${r.heatMult > 1 ? `<span class="stamp-heat">🔥 HEAT ×${r.heatMult}</span>` : ""}</div>` : "";
+    let head = `${stampHtml}<h2>${r.mode === "quick60" ? ui("⚡ 60s Express Complete!", "⚡ Capsule Express 60s accomplie !") : isMicro && mp && !mp.allDone ? `⚡ ${esc(r.microCap.title)} (${mp.doneCount}/${mp.total})` : r.mode === "review" ? ui("Review Complete!", "Révision terminée !") : r.node && r.node.kind === "boss" ? ui("Chapter Boss Defeated!", "Boss vaincu !") : ui("Nicely done!", "Étape accomplie !")}</h2><div class="ody-stars">${st}</div>`;
     let body = "";
     if (isMicro && mp) {
       const pills = mp.caps.map((cp) => {
         const done = !!mp.doneMask[cp.idx];
         return `<span class="micro-res-pill ${done ? "done" : ""}">${done ? "✓" : "○"} ${esc(cp.title)}</span>`;
       }).join("");
-      body += `<div class="ody-micro-summary"><div class="ody-k-label">Progression Micro-Capsules · ${esc(r.node.title)} (${mp.doneCount}/${mp.total})</div><div class="micro-res-row">${pills}</div></div>`;
+      body += `<div class="ody-micro-summary"><div class="ody-k-label">${ui("Progress", "Progression")} · ${esc(r.node.title)} (${mp.doneCount}/${mp.total})</div><div class="micro-res-row">${pills}</div></div>`;
     }
     if (r.lootDrop) {
       body += `<div class="ody-loot-chest">
         <div class="loot-ico">🎁</div>
         <div class="loot-txt">
-          <div class="loot-k">COFFRE DE DOPAMINE DÉBLOQUÉ !</div>
+          <div class="loot-k">${ui("REWARD UNLOCKED!", "RÉCOMPENSE DÉBLOQUÉE !")}</div>
           <b>${esc(r.lootDrop.label)}</b>
           <small>${esc(r.lootDrop.desc)}</small>
         </div>
@@ -7148,29 +8016,30 @@
     }
     if (r.placement) { head = `<div class="ody-seal">🧭</div><h2>Your starting level: ${r.placement.placed}</h2>`; body += `<p class="ody-goal">Everything before ${r.placement.placed} is unlocked. You can still replay any earlier lesson.</p>`; }
     const stats = `<div class="ody-stats">
-      ${r.graded ? `<div><b>${Math.round(r.acc * 100)}%</b><span>accuracy</span></div>` : ""}
+      ${r.graded ? `<div><b>${Math.round(r.acc * 100)}%</b><span>${ui("accuracy", "précision")}</span></div>` : ""}
       <div><b>+${r.xp}</b><span>XP</span></div>
-      ${r.combo >= 3 ? `<div><b>🔥 ${r.combo}</b><span>best combo</span></div>` : ""}
-      <div><b>${r.mins}′</b><span>time</span></div>
-      ${r.spoke ? `<div><b>🎙️ ${r.spoke}</b><span>spoken</span></div>` : ""}</div>`;
+      ${r.combo >= 3 ? `<div><b>🔥 ${r.combo}</b><span>${ui("best combo", "combo")}</span></div>` : ""}
+      <div><b>${r.mins}′</b><span>${ui("time", "temps")}</span></div>
+      ${r.spoke ? `<div><b>🎙️ ${r.spoke}</b><span>${ui("spoken", "oral")}</span></div>` : ""}</div>`;
     const daily = CH().daily; const goal = CH().goal;
-    const goalLine = `<div class="ody-goalbar"><span>Daily goal</span><div class="bar"><i style="width:${Math.min(100, Math.round(daily.xp / goal * 100))}%"></i></div><b>${daily.xp}/${goal} XP</b></div>`;
+    const goalLine = `<div class="ody-goalbar"><span>${ui("Daily goal", "Objectif du jour")}</span><div class="bar"><i style="width:${Math.min(100, Math.round(daily.xp / goal * 100))}%"></i></div><b>${daily.xp}/${goal} XP</b></div>`;
     const retry = (r.exam && !r.exam.passed) || (r.node && !r.exam && r.stars === 0);
     if (r.node && !r.exam && r.stars === 0) {
-      head = `<div class="ody-seal dim">🧭</div><h2>Presque maîtrisé (${Math.round(r.acc * 100)}%)</h2><p class="ody-goal">Atteignez au moins 65% de précision pour valider cette étape. Vos erreurs ont été ajoutées à votre carnet de révision !</p>`;
+      head = `<div class="ody-seal dim">🧭</div><h2>${ui(`Almost there (${Math.round(r.acc * 100)}%)`, `Presque maîtrisé (${Math.round(r.acc * 100)}%)`)}</h2><p class="ody-goal">${ui("Reach at least 65% accuracy to complete this step. Missed phrases were saved to your review list!", "Atteignez au moins 65% de précision pour valider cette étape. Vos erreurs ont été ajoutées à votre carnet de révision !")}</p>`;
     }
-    let nextBtnHtml = `<button class="ody-btn primary big" data-a2="go" data-id="${esc(nx.id)}" id="ody-primary">▶ Suite : ${esc(nx.title.slice(0, 48))}</button>`;
+    const nxTitle = isEnGuide() ? (nx.enTitle || nx.title) : nx.title;
+    const nxMeta = KIND_META[nx.kind] || {};
+    let nextBtnHtml = `<button class="ody-btn primary big" data-a2="go" data-id="${esc(nx.id)}" id="ody-primary">▶ ${ui("Next", "Suite")} : ${esc(nxTitle.slice(0, 44))} ${nxMeta.mins ? `(~${nxMeta.mins})` : ""}</button>`;
     if (retry && r.node) {
-      nextBtnHtml = `<button class="ody-btn primary" data-a2="retry" data-id="${esc(r.node.id)}" id="ody-primary">🔁 Rejouer l'étape</button>`;
+      nextBtnHtml = `<button class="ody-btn primary big" data-a2="retry" data-id="${esc(r.node.id)}" id="ody-primary">🔁 ${ui("Try Again", "Rejouer l'étape")}</button>`;
     } else if (isMicro && mp && !mp.allDone) {
       const nextCp = mp.caps[mp.nextCapIdx] || mp.caps[0];
-      nextBtnHtml = `<button class="ody-btn primary big" data-a2="microcap" data-id="${esc(r.node.id)}" data-cap="${mp.nextCapIdx}" id="ody-primary">⚡ Suite : ${esc(nextCp.title)} (${mp.nextCapIdx + 1}/${mp.total} · 90s)</button>`;
+      nextBtnHtml = `<button class="ody-btn primary big" data-a2="microcap" data-id="${esc(r.node.id)}" data-cap="${mp.nextCapIdx}" id="ody-primary">▶ ${ui("Next Part", "Suite")} : ${esc(nextCp.title)} (${mp.nextCapIdx + 1}/${mp.total})</button>`;
     }
     main.innerHTML = `<div class="ody-result">${head}${stats}${body}${goalLine}
       <div class="ody-row center">
         ${nextBtnHtml}
-        <button class="ody-btn ghost" data-a2="quick60">⚡ Encore 60s</button>
-        <button class="ody-btn ghost" data-a2="home">🏠 Carte</button>
+        <button class="ody-btn ghost" data-a2="home">← ${ui("Back to Path", "Retour au Chemin")}</button>
       </div></div>`;
     if (r.stars === 3 && window.RPG_VFX && window.RPG_VFX.burst) { try { window.RPG_VFX.burst(window.innerWidth / 2, 200, "#fbbf24", 40); } catch (e) {} }
     setTimeout(() => { const b = $("ody-primary"); if (b) b.focus({ preventScroll: true }); }, 60);
@@ -7189,7 +8058,8 @@
 
   // =================================================================== HOME — LE CHEMIN
   const LEVEL_NAMES = { A1: "Débutant", A2: "Élémentaire", B1: "Intermédiaire", B2: "Avancé", C1: "Autonome", C2: "Maîtrise", NATIF: "Natif" };
-  const HOME = { open: {}, unitOpen: {} };
+  const LEVEL_EN_NAMES = { A1: "Foundations", A2: "Everyday Paris", B1: "Independent", B2: "Nuance & Debate", C1: "Executive Fluency", C2: "Mastery", NATIF: "Native Crown" };
+  const HOME = { open: {}, unitOpen: {}, tab: "play" };
   function nodeStars(n) { return CH().done[n.id] || 0; }
   function levelNodes(lv, forceAll) {
     const c = CH();
@@ -7271,9 +8141,9 @@
     let weakest = pillars[0], lowVal = 101;
     const bars = pillars.map((pl) => {
       const x = lsk[pl.k] || (pl.k === "writing" ? lsk.grammar : null);
-      const pct = x && x.n ? Math.round((typeof x.ema === "number" ? x.ema : x.ok / x.n) * 100) : 0;
+      const pct = skillMasteryPct(x, 25);
       if (pct < lowVal) { lowVal = pct; weakest = pl; }
-      return `<button type="button" class="lm-pill" data-a2="${pl.act}" ${pl.sc ? `data-s="${pl.sc}"` : `data-p="${pl.p}" data-lv="${lv}"`} title="Renforcer ${pl.lbl} au niveau ${lv} (${pct}%)">
+      return `<button type="button" class="lm-pill" data-a2="${pl.act}" ${pl.sc ? `data-s="${pl.sc}"` : `data-p="${pl.p}" data-lv="${lv}"`} title="Renforcer ${pl.lbl} au niveau ${lv} (${pct}% · ${(x && x.n) || 0} reps)">
         <span>${pl.ic} ${pl.lbl}</span>
         <i><b style="width:${Math.max(4, pct)}%"></b></i>
         <small>${pct}%</small>
@@ -7346,14 +8216,14 @@
       const k = s.k || s.key;
       const ic = s.ic || s.icon || "✨";
       const x = sk[k] || { n: 0, ok: 0, ema: 0 };
-      const pct = x.n ? Math.round((typeof x.ema === "number" ? x.ema : (x.ok / x.n)) * 100) : 0;
-      const barW = x.n ? Math.max(8, Math.min(100, Math.round(pct * 0.7 + Math.min(30, Math.sqrt(x.ok) * 4)))) : 0;
+      const pct = skillMasteryPct(x, 25);
+      const barW = x.n ? Math.max(4, pct) : 0;
       return `<div class="ody-skill" data-sk="${k}"><span>${ic} ${s.label}</span><i class="pbar"><b style="width:${barW}%"></b></i><small>${x.ok} ✓${x.n ? ` · ${pct}%` : ""}</small></div>`;
     }).join("");
     const wk = weakestSkillKey();
     const wkMeta = ALL_SKILLS.find((s) => (s.k || s.key) === wk) || ALL_SKILLS[0];
     const wkIc = wkMeta.ic || wkMeta.icon || "🎯";
-    return rows + `<button class="ody-btn small ghost" style="width:100%;margin-top:.55rem" data-a2="weakspot">🎯 Renforcer : ${wkIc} ${esc(wkMeta.label)}</button>`;
+    return rows + `<button class="ody-btn small ghost" style="width:100%;margin-top:.55rem" data-a2="weakspot">🎯 ${ui("Train Weak Spot", "Renforcer")} : ${wkIc} ${esc(wkMeta.label)}</button>`;
   }
   function gatesPanel() {
     return LEVELS.map((lv) => { const g = CH().gates[lv]; return `<div class="ody-gate-pill ${g && g.passed ? "ok" : ""}">${lv === "NATIF" ? "👑" : lv}<small>${g && g.passed ? (g.placed ? "placed" : "✔ " + (g.best || g.score) + "%") : g ? g.score + "%" : "—"}</small></div>`; }).join("");
@@ -7450,7 +8320,7 @@
   function parisMapStripHtml() {
     const c = CH();
     const spots = [
-      { id: "dist:district_gare_du_nord", xp: 9, yp: 24, ic: "🚄", name: "Gare du Nord", sub: "Contrôle RATP · A1" },
+      { id: "dist:district_gare_du_nord", xp: 9, yp: 24, ic: "🚄", name: "Gare du Nord", sub: "RATP · A1" },
       { id: "atel:write_a1_brasserie", xp: 14, yp: 76, ic: "☕", name: "Saint-Germain", sub: "Café de Flore · A1" },
       { id: "dist:district_montmartre_bistrot", xp: 26, yp: 22, ic: "🥐", name: "Montmartre", sub: "Bistrot · A2" },
       { id: "dist:district_marais_galerie", xp: 34, yp: 72, ic: "🎨", name: "Le Marais", sub: "Place des Vosges · A2" },
@@ -7461,37 +8331,29 @@
       { id: "dist:district_la_defense_comex", xp: 85, yp: 24, ic: "💼", name: "La Défense", sub: "COMEX · C1" },
       { id: "dist:district_academie_coupole", xp: 91, yp: 74, ic: "👑", name: "Sous la Coupole", sub: "Académie · C2" }
     ];
+    const essecPin = { id: "essec:essec_rer_cergy", xp: 5, yp: 50, ic: "🎓", name: "Cergy · ESSEC", sub: "RER A · A2–C1" };
     const pinsHtml = spots.map((sp) => {
       const done = !!(c.done && c.done[sp.id]);
       const part = c.partial && c.partial[sp.id];
       const hasPart = hasPartialProgress(part);
       return `<button type="button" class="pm-pin ${done ? "done" : ""} ${hasPart ? "partial" : ""}" style="left:${sp.xp}%;top:${sp.yp}%" data-a2="landmark" data-id="${sp.id}" title="${esc(sp.name)} — ${esc(sp.sub)}">
         <span class="pm-ico">${sp.ic}</span>
-        <span class="pm-txt"><b>${esc(sp.name)}</b><small>${hasPart ? `Étape ${part.i + 1}/${partStepLen(part)}` : done ? "★ Accompli" : esc(sp.sub)}</small></span>
+        <span class="pm-txt"><b>${esc(sp.name)}</b><small>${hasPart ? `Step ${part.i + 1}/${partStepLen(part)}` : done ? "★ Done" : esc(sp.sub)}</small></span>
       </button>`;
-    }).join("");
-    return `<section class="ody-paris-map" aria-label="Carte Vivante de Paris">
+    }).join("") + `<button type="button" class="pm-pin is-essec ${c.done && c.done[essecPin.id] ? "done" : ""}" style="left:${essecPin.xp}%;top:${essecPin.yp}%" data-a2="landmark" data-id="${essecPin.id}" title="${esc(essecPin.name)} — ${esc(essecPin.sub)}">
+      <span class="pm-ico">${essecPin.ic}</span>
+      <span class="pm-txt"><b>${esc(essecPin.name)}</b><small>${esc(essecPin.sub)}</small></span>
+    </button>`;
+    return `<section class="ody-paris-map" aria-label="Living Map of Paris & Île-de-France">
       <div class="pm-head">
         <div>
-          <span class="pm-kicker">🗺️ CARTE VIVANTE DE PARIS · 10 QUARTIERS &amp; 12 ATELIERS C2</span>
-          <h3>Explorez les Quartiers, Joutes Oratoires &amp; Studios de la Capitale</h3>
-        </div>
-        <div class="pm-actions">
-          <button type="button" class="ody-btn small ghost" data-a2="perioderun">✒️ Période &amp; Modes</button>
-          <button type="button" class="ody-btn small ghost" data-a2="idiomerun">🎭 Idiomes &amp; Litotes</button>
-          <button type="button" class="ody-btn small ghost" data-a2="jouterun">⚖️ Joute C2</button>
-          <button type="button" class="ody-btn small ghost" data-a2="sleuthrun">🕵️ Enquête &amp; Forge</button>
-          <button type="button" class="ody-btn small ghost" data-a2="radiorun">📻 Radio Lumière</button>
-          <button type="button" class="ody-btn small ghost" data-a2="alldistricts">🏙️ 10 Quartiers</button>
-          <button type="button" class="ody-btn small ghost" data-a2="allateliers">✒️ 12 Ateliers</button>
-          <button type="button" class="ody-btn small ghost" data-a2="allidiomes">📚 18 Idiomes</button>
-          <button type="button" class="ody-btn small ghost" data-a2="allperiodes">📜 16 Périodes</button>
-          <button type="button" class="ody-btn small ghost" data-a2="pantheon">🏛️ Panthéon</button>
+          <span class="pm-kicker">🗺️ ${ui("LIVING MAP OF PARIS & ÎLE-DE-FRANCE", "CARTE VIVANTE DE PARIS & ÎLE-DE-FRANCE")}</span>
+          <h3>${ui("Tap any neighborhood to step into a live Parisian scene", "Touchez un quartier pour entrer dans une scène vivante")}</h3>
         </div>
       </div>
       <div class="pm-canvas" style="background-image:linear-gradient(180deg, rgba(15, 23, 42, 0.25), rgba(15, 23, 42, 0.55)), url('assets/bg_paris_seine_map.jpg');background-size:cover;background-position:center;">
         <svg class="pm-svg" viewBox="0 0 900 180" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M81,43 L126,136 L234,40 L306,130 L405,50 L486,133 L585,47 L666,133 L765,43 L819,133" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-dasharray="6 6" opacity="0.85"/>
+          <path d="M45,90 L81,43 L126,136 L234,40 L306,130 L405,50 L486,133 L585,47 L666,133 L765,43 L819,133" fill="none" stroke="#f5c96a" stroke-width="2.5" stroke-dasharray="6 6" opacity="0.85"/>
         </svg>
         <div class="pm-pins">${pinsHtml}</div>
       </div>
@@ -7550,9 +8412,13 @@
 
   function isEnGuide() {
     const c = CH();
-    if (c.uiLang === "en") return true;
-    if (c.uiLang === "fr") return false;
+    const m = c.uiLang || c.langMode || "auto";
+    if (m === "en") return true;
+    if (m === "fr") return false;
     return cefrRank(currentLevel()) <= 1;
+  }
+  function ui(enStr, frStr) {
+    return isEnGuide() ? enStr : frStr;
   }
 
   function bondLevelInfo(pts) {
@@ -7791,10 +8657,7 @@
     const isRoyal = c.pathMode !== "integral";
     const royalTotal = NODES.filter((n) => n.royal).length;
     const integralTotal = NODES.length;
-    const pctFor = (k) => {
-      const x = sk[k] || { n: 0, ok: 0, ema: 0 };
-      return x.n ? Math.round((typeof x.ema === "number" ? x.ema : (x.ok / x.n)) * 100) : 0;
-    };
+    const pctFor = (k) => skillMasteryPct(sk[k], 25);
     const lv = currentLevel() === "NATIF" ? "C2" : currentLevel();
     return `<section class="ody-quatuor-deck" aria-label="Les 4 Piliers Natifs & Sélecteur de Parcours">
       <div class="ody-voie-bar">
@@ -7843,6 +8706,335 @@
     </section>`;
   }
 
+  function c2ReadinessCardHtml() {
+    const c = CH();
+    const r = c.c2Readiness || {};
+    const detoxCount = Object.keys(r.accentDetox || {}).length;
+    const fsrs = Object.values((SAVE() && SAVE().fsrsCards) || {});
+    const fsrsGood = fsrs.filter((x) => x && (x.reps || 0) >= 1 && (x.lapses || 0) <= (x.reps || 0)).length;
+    const fsrsPct = fsrs.length >= 10 ? Math.round((fsrsGood / fsrs.length) * 100) : 0;
+    const checks = [
+      { ic: "👄", title: ui("Indian-English Accent Detox (Mic Verified)", "Détox Accent · Micro vérifié"), done: detoxCount >= 6, val: `${detoxCount}/6` },
+      { ic: "📻", title: ui("C2 Real Native Audio + Note-Taking", "Écoute Radio Native C2 & Prise de notes"), done: !!(r.listening && r.listening.passed), val: r.listening && r.listening.passed ? `${r.listening.score}% ✓` : ui("Not yet passed", "À valider") },
+      { ic: "⚖️", title: ui("10-min Exposé + Live Adversarial Jury (≥25/50)", "Exposé 10 min + Jury Contradictoire (≥25/50)"), done: !!(r.jury && r.jury.passed), val: r.jury && r.jury.passed ? `${r.jury.score}% ✓` : ui("Not yet passed", "À valider") },
+      { ic: "📑", title: ui("700-Word Multi-Doc DALF C2 Synthesis (≥25/50)", "Synthèse Dossier 700 mots DALF C2 (≥25/50)"), done: !!(r.writing && r.writing.passed), val: r.writing && r.writing.passed ? `${r.writing.score}% ✓` : ui("Not yet passed", "À valider") },
+      { ic: "🧠", title: ui("Cross-Era Active Recall Retention (≥80%)", "Rétention Active FSRS Multi-Époques (≥80%)"), done: fsrs.length >= 20 && fsrsPct >= 80, val: fsrs.length >= 10 ? `${fsrsPct}%` : `${fsrs.length}/20 cards` }
+    ];
+    const doneCnt = checks.filter((x) => x.done).length;
+    const allGold = doneCnt === checks.length;
+    return `<div class="ody-readiness-card ${allGold ? "is-ready" : ""}" id="ody-c2-readiness">
+      <div class="ody-readiness-head">
+        <div>
+          <h4>🏛️ ${ui("Official DALF C2 Exam Readiness", "Préparation Officielle DALF C2")}</h4>
+          <div class="ody-mini">${ui("Turns Gold ONLY when all 5 real exam benchmarks are genuinely passed — Free Roam never fakes Readiness.", "Passe en Or uniquement lorsque les 5 épreuves réelles sont validées sans contournement.")}</div>
+        </div>
+        <span class="ody-readiness-badge ${allGold ? "is-ready" : ""}">${doneCnt}/5 ${allGold ? "👑 READY" : ui("Verified", "Vérifiés")}</span>
+      </div>
+      <div class="ody-readiness-rows">
+        ${checks.map((x) => `<div class="ody-readiness-row ${x.done ? "is-met" : ""}">
+          <span>${x.ic} <b>${esc(x.title)}</b></span>
+          <span class="rr-status">${esc(x.val)}</span>
+        </div>`).join("")}
+      </div>
+    </div>`;
+  }
+
+  function goldenPathTrailHtml(curLv, activeNode) {
+    const c = CH();
+    const isRoyal = c.pathMode !== "integral";
+    const vp = c.voicePending || {};
+    const eraUnits = UNITS.filter((u) => {
+      if (!u.nodes.length || levelOfNode(u.nodes[0]) !== curLv) return false;
+      return isRoyal ? u.nodes.some((n) => n.royal) : true;
+    });
+    const offsets = [0, 56, 0, -56];
+    let globalIdx = 0;
+    const chaptersHtml = eraUnits.map((u) => {
+      const vis = isRoyal ? u.nodes.filter((n) => n.royal) : u.nodes;
+      if (!vis.length) return "";
+      const hasCurrent = vis.some((n) => n.id === activeNode.id);
+      const chDone = vis.filter((n) => nodeStars(n) > 0).length;
+      const chPct = Math.round((chDone / Math.max(1, vis.length)) * 100);
+      const chKicker = u.gate
+        ? ui("Official Milestone Gate", "Épreuve Officielle")
+        : u.num === 0
+          ? ui("Chapter 0 · Day-1 Golden Path", "Chapitre 0 · Premiers Pas")
+          : (u.num != null ? `${ui("Chapter", "Monde")} ${u.num} · ${esc(curLv)}` : esc(curLv));
+      const chTitle = u.gate ? `🏛️ ${esc(u.title)}` : u.num === 0 ? `✨ ${esc(ui("First Steps in Paris", u.title))}` : esc(ui(u.enTitle || u.title, u.title));
+      const nodesHtml = vis.map((n) => {
+        const done = nodeStars(n);
+        const isSilver = !!(done && vp[n.id]);
+        const isNext = n.id === activeNode.id;
+        const open = isUnlocked(n);
+        const part = c.partial && c.partial[n.id];
+        const hasPart = hasPartialProgress(part) && !isStaleMarathonPartial(n, part);
+        const meta = KIND_META[n.kind] || { icon: "•", mins: "2 min" };
+        const off = offsets[globalIdx % offsets.length];
+        globalIdx += 1;
+        const nTitle = isEnGuide() ? (n.enTitle || n.title) : n.title;
+        const isMilestone = ["boss", "gate", "natif", "dossier", "jury", "radio", "chronique"].includes(n.kind);
+        const nodeCls = [
+          "ody-trail-node", "ody-node", "k-" + n.kind,
+          isNext ? "is-next cur" : "",
+          done ? (isSilver ? "is-done is-silver done" : "is-done done") : "",
+          hasPart ? "partial" : "",
+          !open ? "is-locked locked" : "",
+          isMilestone ? "is-milestone" : ""
+        ].filter(Boolean).join(" ");
+        const pill = hasPart ? `STEP ${part.i + 1}/${partStepLen(part)}` : isNext ? ui("UP NEXT", "À JOUER") : "";
+        return `<button type="button" class="${nodeCls}" style="--offset:${off}px" data-a2="node" data-id="${esc(n.id)}" title="${esc(nTitle)}">
+          <span class="ody-trail-medallion">
+            ${pill ? `<span class="ody-trail-pill">${esc(pill)}</span>` : ""}
+            <span>${!open ? "🔒" : meta.icon}</span>
+            ${done ? `<span class="ody-trail-badge">${isSilver ? "🔇" : "★"}</span>` : ""}
+          </span>
+          <span class="ody-trail-label">${esc(nTitle.length > 34 ? nTitle.slice(0, 33) + "…" : nTitle)}</span>
+          <span class="ody-trail-meta">${esc(ui(meta.enLabel || meta.label || "", meta.label || ""))} · ${esc(meta.mins || "2–3 min")}</span>
+        </button>`;
+      }).join("");
+      return `<div class="ody-trail-chapter ${hasCurrent ? "is-current" : ""}">
+        <div class="ody-trail-ch-head">
+          <div>
+            <div class="ody-trail-ch-kicker">${chKicker}</div>
+            <h3 class="ody-trail-ch-title">${chTitle}</h3>
+          </div>
+          <div class="ody-trail-ch-prog">
+            <span>${chDone}/${vis.length}</span>
+            <i class="pbar"><b style="width:${chPct}%"></b></i>
+          </div>
+        </div>
+        <div class="ody-trail-path">${nodesHtml}</div>
+      </div>`;
+    }).join("");
+    const curRank = cefrRank(curLv);
+    const nextLv = curRank < CEFR.length - 1 ? CEFR[curRank + 1] : "NATIF";
+    return `<section class="ody-trail" aria-label="The One Golden Path">
+      ${chaptersHtml}
+      <div class="ody-era-footer">
+        <div>
+          <h4>${ui(`Next Era: ${nextLv}`, `Prochaine Époque : ${nextLv}`)} · ${esc(ui(LEVEL_EN_NAMES[nextLv] || nextLv, LEVEL_NAMES[nextLv] || nextLv))}</h4>
+          <small>${ui("Complete your current Era or browse all A1 → C2 levels anytime in Studio.", "Complétez votre époque actuelle ou explorez A1 → C2 dans Studio.")}</small>
+        </div>
+        <button type="button" class="ody-btn ghost small" data-a2="tab" data-tab="studio">${ui("Browse all Eras (A1 → C2) →", "Voir toutes les époques →")}</button>
+      </div>
+    </section>`;
+  }
+
+  function renderPlayTab(activeNode, activePart, isResuming, isStandaloneActive, standalonePart, activeKey, rv, daily) {
+    const c = CH();
+    const meta = KIND_META[activeNode.kind] || {};
+    const name = c.name ? ` ${esc(c.name)}` : "";
+    const curLv = levelOfNode(activeNode);
+    const actLen = partStepLen(activePart);
+    const stndLen = partStepLen(standalonePart);
+    const started = Object.keys(c.done).length > 0 || isResuming;
+    const nodeTitle = isEnGuide() ? (activeNode.enTitle || activeNode.title) : activeNode.title;
+    const chTag = activeNode.unitObj && activeNode.unitObj.num === 0
+      ? ui("Chapter 0 · First Steps in Paris", "Chapitre 0 · Premiers pas")
+      : `${esc(curLv)} · ${esc(ui(LEVEL_EN_NAMES[curLv] || curLv, LEVEL_NAMES[curLv] || curLv))}`;
+    const subLine = isResuming
+      ? ui(`In progress · Step ${activePart.i + 1} of ${actLen}`, `En cours · Étape ${activePart.i + 1} sur ${actLen}`)
+      : `${esc(ui(meta.enLabel || meta.label || "Lesson", meta.label || "Leçon"))} · ~${esc(meta.mins || "2–3 min")}`;
+    // At most ONE muted, non-green utility chip (never competes with the ONE emerald #ody-primary CTA)
+    let utilChip = "";
+    const inspectedCount = Object.keys(c.inspected || {}).length;
+    const claimed = (c.contractsDate === today() && c.contractsClaimed) || {};
+    const contractReady = (!claimed.curiosite && inspectedCount >= 3) || (!claimed.epreuve && ((daily.sessions || 0) >= 1 || (daily.nodes || 0) >= 1)) || (!claimed.elan && (daily.xp || 0) >= c.goal);
+    if (isStandaloneActive && standalonePart) {
+      utilChip = `<button type="button" class="ody-utility-chip" data-a2="resumemode" data-k="${esc(activeKey)}"><span>⚡ ${ui("Paused:", "En pause :")} <b>${esc(standalonePart.title || standalonePart.mode)}</b> (${standalonePart.i + 1}/${stndLen})</span><span class="uc-tag">${ui("Resume →", "Reprendre →")}</span></button>`;
+    } else if (contractReady) {
+      utilChip = `<button type="button" class="ody-utility-chip" data-a2="tab" data-tab="studio"><span>🎁 ${ui("Daily reward ready to claim in Studio", "Récompense du jour prête dans Studio")}</span><span class="uc-tag">${ui("Claim →", "Réclamer →")}</span></button>`;
+    } else if (rv >= 5) {
+      utilChip = `<button type="button" class="ody-utility-chip" data-a2="review"><span>🔁 ${ui(`${Math.min(rv, 12)} phrases ready for quick review`, `${Math.min(rv, 12)} phrases à réviser`)}</span><span class="uc-tag">${ui("Review →", "Réviser →")}</span></button>`;
+    }
+    return `<div class="ody-home ody-tab-play">
+      <section class="ody-hero-v28">
+        <div class="ody-hero-left">
+          ${camille("md")}
+          <div class="ody-hero-meta">
+            <div class="ody-hero-kicker">${ui(`Bonjour${name}`, `Bonjour${name}`)} · ${chTag}</div>
+            <h2 class="ody-hero-title">${meta.icon || ""} ${esc(nodeTitle)}</h2>
+            <div class="ody-hero-sub">${subLine}</div>
+          </div>
+        </div>
+        <div class="ody-hero-right">
+          <button class="ody-btn primary big" data-a2="go" data-id="${esc(activeNode.id)}" id="ody-primary">▶ ${isResuming ? ui(`Resume (Step ${activePart.i + 1}/${actLen})`, `Reprendre (Étape ${activePart.i + 1}/${actLen})`) : started ? ui("Continue", "Continuer") : ui("Start", "Commencer")}</button>
+          ${isResuming ? `<button type="button" class="ody-hero-restart" data-a2="restart" data-id="${esc(activeNode.id)}">${ui("Restart from Step 1", "Recommencer")}</button>` : ""}
+        </div>
+      </section>
+      ${utilChip}
+      ${goldenPathTrailHtml(curLv, activeNode)}
+    </div>`;
+  }
+
+  function renderParisTab(activeNode, mpActive) {
+    const c = CH();
+    const scenes = Array.isArray(window.VISUAL_SCENES) ? window.VISUAL_SCENES : [];
+    const essecSc = (ESSEC_PACK().scenarios || []);
+    const friendsHtml = AMIS_DE_PARIS.map((f) => {
+      const pts = (c.bonds && c.bonds[f.id]) || 0;
+      const b = bondLevelInfo(pts);
+      return `<button type="button" class="ody-friend-card" data-a2="amis" data-fid="${esc(f.id)}">
+        <img src="${f.img}" alt="${esc(f.name)}" onerror="this.style.display='none'">
+        <span><b>${esc(f.name)}</b><small>${esc(f.place)} · ❤️ Lv.${b.lv}</small></span>
+      </button>`;
+    }).join("");
+    const essecHtml = essecSc.length ? `<section class="ody-paris-section">
+      <h3>🎓 ${ui("Real Life in France · Cergy, ESSEC & La Défense", "Vie Réelle en France · Cergy, ESSEC & La Défense")}</h3>
+      <div class="ps-sub">${ui("Survival & executive scenarios tailored to ESSEC MIM life (A2 → C1).", "Scénarios authentiques de la vie étudiante et pro en Île-de-France (A2 → C1).")}</div>
+      <div class="ody-paris-grid">
+        ${essecSc.map((sc) => `<button type="button" class="lsd-card" data-a2="playessec" data-sid="${esc(sc.id)}">
+          <span class="lsd-ic">${sc.icon || "🏛️"}</span>
+          <span><b>${esc(sc.cefr)} · ${esc(isEnGuide() ? (sc.enTitle || sc.title) : sc.title)}</b><small>${esc(sc.location || "")}</small></span>
+        </button>`).join("")}
+      </div>
+    </section>` : "";
+    const exploreGrid = scenes.length ? `<section class="ody-paris-section">
+      <div class="ody-row between" style="margin-bottom:.35rem">
+        <div>
+          <h3>🗺️ ${ui("Explore Paris Visually", "Explorer Paris en Images")}</h3>
+          <div class="ps-sub" style="margin-bottom:0">${ui("Tap objects directly inside 10 illustrated scenes · Zero English translation.", "Touchez les objets directement dans 10 scènes illustrées · Zéro traduction.")}</div>
+        </div>
+        <button type="button" class="ody-btn ghost tiny" data-a2="openexplorepicker">${ui("All 10 Scenes", "Les 10 Scènes")} ▸</button>
+      </div>
+      <div class="ody-paris-grid" style="margin-top:12px">
+        ${scenes.map((sc) => `<button type="button" class="exp-pick-card" data-a2="explore" data-sid="${esc(sc.id)}">
+          <div class="epc-img" style="background-image:url('${sc.bg}')"><span class="chr-cefr">${esc(sc.cefr)}</span></div>
+          <div class="epc-body"><b>${esc(sc.title)}</b><small>${esc(sc.place)}</small></div>
+        </button>`).join("")}
+      </div>
+    </section>` : "";
+    return `<div class="ody-home ody-tab-paris">
+      <div class="ody-paris-stack">
+        ${parisDispatchHtml(activeNode, mpActive)}
+        <section class="ody-paris-section">
+          <h3>📱 ${ui("My Parisian Friends", "Mes Amis Parisiens")}</h3>
+          <div class="ps-sub">${ui("Chat or speak aloud anytime — powered by local PC or Tablet Gemini BYOK.", "Discutez à l'écrit ou au micro avec vos 4 amis parisiens.")}</div>
+          <div class="ody-friends-row">${friendsHtml}</div>
+        </section>
+        ${essecHtml}
+        ${exploreGrid}
+        ${chroniquesStripHtml()}
+        ${parisMapStripHtml()}
+      </div>
+    </div>`;
+  }
+
+  function renderStudioTab(activeNode, daily, rv) {
+    const c = CH();
+    const curLv = currentLevel();
+    const isAdv = cefrRank(curLv) >= 3; // auto-expand Advanced C2 shelf at B2+
+    const curTitle = c.equippedTitle || "🐣 Flâneur de la Seine";
+    const ep = ESSEC_PACK();
+    const dossiers = ep.dossiers || [];
+    const debates = ep.debates || [];
+    const c2MocksHtml = (dossiers.length || debates.length) ? `<div class="ody-panel" style="margin-bottom:.75rem">
+      <div class="ody-panel-t">🏛️ ${ui("Official Timed DALF C2 Exam Mocks (700w Multi-Doc Dossiers & Live Jury Debates)", "Examens Blancs Officiels DALF C2 (Dossiers 700 mots & Jury Contradictoire)")}</div>
+      <div class="ody-paris-grid">
+        ${dossiers.map((d) => `<button type="button" class="lsd-card is-visual" data-a2="playdossier" data-did="${esc(d.id)}">
+          <span class="lsd-ic">📑</span>
+          <span><b>C2 Dossier · ${esc(isEnGuide() ? (d.enTitle || d.title) : d.title)}</b><small>${(d.docs || []).length} docs · ${d.minWords || 700}w synthesis</small></span>
+        </button>`).join("")}
+        ${debates.map((deb) => `<button type="button" class="lsd-card is-swipe" data-a2="playjury" data-jid="${esc(deb.id)}">
+          <span class="lsd-ic">⚖️</span>
+          <span><b>C2 Live Jury · ${esc(isEnGuide() ? (deb.enTitle || deb.title) : deb.title)}</b><small>${esc(deb.durationLabel || "Exposé + Adversarial Jury")}</small></span>
+        </button>`).join("")}
+      </div>
+    </div>` : "";
+    const tile = (sc, ic, t, sub) => `<button type="button" class="ody-tile-m" data-a2="scene" data-s="${sc}"><span class="ic">${ic}</span><b>${t}</b><small>${sub}</small></button>`;
+    return `<div class="ody-home ody-tab-studio"><div class="ody-studio-stack">
+      <details class="ody-studio-shelf" open>
+        <summary>⚡ ${ui("1. Quick Practice & Core Drills", "1. Pratique Rapide & 4 Piliers")}</summary>
+        <div class="ody-studio-body">
+          ${rv >= 1 ? `<button class="ody-review-card" data-a2="review" style="margin-bottom:.8rem"><span class="ic">🔁</span><span><b>${ui(`Active SRS Review · ${Math.min(rv, 12)} phrases`, `Carnet de révision · ${Math.min(rv, 12)} expressions`)}</b><small>${ui("Lock fragile words before they fade.", "Consolidez vos points fragiles.")}</small></span><span class="go">▶</span></button>` : ""}
+          ${levelStudioDeckHtml()}
+          ${quatuorAndPathBarHtml()}
+          <div class="ody-row" style="margin-top:.7rem">
+            <button type="button" class="ody-btn small ghost" data-a2="quick60">⚡ ${ui("Express 60s", "Capsule Express 60s")}</button>
+            <button type="button" class="ody-btn small ghost" data-a2="blitz">🔥 ${ui("Blitz Reflex", "Blitz Réflexe")}</button>
+            <button type="button" class="ody-btn small ghost" data-a2="weakspot">🎯 ${ui("Train Weak Spot", "Point Faible")}</button>
+            <button type="button" class="ody-btn small ghost" data-a2="scene" data-s="soundlab">👄 ${ui("Sound Lab & Accent Detox", "Labo des Sons")}</button>
+          </div>
+        </div>
+      </details>
+
+      <details class="ody-studio-shelf" open>
+        <summary>🗺️ ${ui("2. Roadmap, Progress & Official DALF C2 Readiness", "2. Feuille de Route, Progrès & Préparation DALF C2")}</summary>
+        <div class="ody-studio-body">
+          ${c2ReadinessCardHtml()}
+          <div class="ody-paris-grid" style="margin:.8rem 0">
+            <div class="ody-panel">
+              <div class="ody-ring" style="--p:${Math.min(100, Math.round(daily.xp / c.goal * 100))}"><b>${daily.xp}</b><small>/ ${c.goal} XP</small></div>
+              <div class="ody-streak">🔥 <b>${SAVE().streak || 0}</b> ${ui("day streak", "jours")}${(SAVE().streakFreezes || 0) ? ` · ❄️ ${SAVE().streakFreezes}` : ""}</div>
+              <div class="ody-row center" style="margin-top:.55rem"><button type="button" class="ody-btn small ghost" data-a2="portfolio">📓 ${ui("My Writing Portfolio", "Mon Portfolio Écrit")}</button></div>
+            </div>
+            ${odysseyAtlasPanel()}
+          </div>
+          <div class="ody-panel" style="margin-bottom:.85rem">
+            <div class="ody-panel-t">📊 ${ui("7 Competencies to C2", "7 Compétences vers le C2")}</div>
+            ${skillPanel()}
+            <div class="ody-gates">${gatesPanel()}</div>
+            <div class="ody-mini" style="margin-top:.5rem">${Object.values(c.gates).filter((g) => g && g.passed && !g.placed).length}/7 ${ui("level exams passed.", "examens de niveau validés.")}</div>
+          </div>
+          <div class="ody-levels">${LEVELS.map((lv) => levelHtml(lv, activeNode)).join("")}</div>
+        </div>
+      </details>
+
+      <details class="ody-studio-shelf" id="ody-shelf-rewards" ${isAdv ? "open" : ""}>
+        <summary>🎁 ${ui("3. Daily Contracts, Relics & Pantheon Prestige", "3. Contrats, Reliques & Panthéon")}</summary>
+        <div class="ody-studio-body">
+          <div class="ody-row between" style="margin-bottom:.65rem">
+            <span>⚜️ <b>${c.reputation || 0}</b> ${ui("Reputation", "Réputation")} · 🪙 <b>${(SAVE().gold || 0).toLocaleString()}</b></span>
+            <button type="button" class="ody-title-badge" data-a2="pantheon" title="Open Pantheon of Immortals">${esc(curTitle)} · 🏛️ ${ui("Pantheon", "Panthéon")}</button>
+          </div>
+          ${dailyContractsPanel()}
+        </div>
+      </details>
+
+      <details class="ody-studio-shelf" id="ody-shelf-c2" ${isAdv ? "open" : ""}>
+        <summary>🏛️ ${ui("4. Advanced C2 Workshops, Official Mocks & Library (B2 → C2)", "4. Ateliers Avancés C2, Examens Blancs & Bibliothèque")}</summary>
+        <div class="ody-studio-body">
+          ${c2MocksHtml}
+          <div class="ody-neuro-bar">
+            <button class="ody-neuro-btn quick60" data-a2="quick60"><span class="ni">⚡</span><span><b>Capsule Express 60s</b><small>4 micro-actions</small></span></button>
+            <button class="ody-neuro-btn ame" data-a2="amerun"><span class="ni">🇫🇷</span><span><b>L'Âme &amp; Pensée Directe</b><small>36 native reflexes</small></span></button>
+            <button class="ody-neuro-btn amis" data-a2="amis"><span class="ni">🥂</span><span><b>Mes Amis de Paris</b><small>4 friends · Voice &amp; Chat</small></span></button>
+            <button class="ody-neuro-btn blitz" data-a2="blitz"><span class="ni">🔥</span><span><b>Blitz Réflexe</b><small>6s speed wiring</small></span></button>
+            <button class="ody-neuro-btn shad" data-a2="shadowrun"><span class="ni">🎙️</span><span><b>Studio Shadowing</b><small>Native rhythm</small></span></button>
+            <button class="ody-neuro-btn imp" data-a2="improvrun"><span class="ni">🎭</span><span><b>Improv à Paris</b><small>Live street scenes</small></span></button>
+            <button class="ody-neuro-btn sleuth" data-a2="sleuthrun"><span class="ni">🕵️</span><span><b>Enquête &amp; Forge C2</b><small>Errors, verbs &amp; liaisons</small></span></button>
+            <button class="ody-neuro-btn joute" data-a2="jouterun"><span class="ni"><img src="assets/pixel_balance.png" class="ob-mini-px" alt="⚖️"></span><span><b>Joute Oratoire C2</b><small>Concession · Réfutation · Synthèse</small></span></button>
+            <button class="ody-neuro-btn idiome" data-a2="idiomerun"><span class="ni"><img src="assets/pixel_masque.png" class="ob-mini-px" alt="🎭"></span><span><b>Idiomes &amp; Litotes C2</b><small>18 litotes &amp; Synthèse</small></span></button>
+            <button class="ody-neuro-btn periode" data-a2="perioderun"><span class="ni"><img src="assets/pixel_plume.png" class="ob-mini-px" alt="✒️"></span><span><b>Architecte de la Période</b><small>16 periods &amp; 18 modes</small></span></button>
+            <button class="ody-neuro-btn pantheon" data-a2="pantheon"><span class="ni"><img src="assets/pixel_pantheon.png" class="ob-mini-px" alt="🏛️"></span><span><b>Panthéon des Immortels</b><small>18 Seals &amp; Titles</small></span></button>
+          </div>
+          <div class="ody-row" style="margin:.7rem 0;flex-wrap:wrap">
+            <button type="button" class="ody-btn small ghost" data-a2="alldistricts">🏙️ 12 Quartiers</button>
+            <button type="button" class="ody-btn small ghost" data-a2="allateliers">✒️ 18 Ateliers</button>
+            <button type="button" class="ody-btn small ghost" data-a2="allidiomes">📚 18 Idiomes</button>
+            <button type="button" class="ody-btn small ghost" data-a2="allperiodes">📜 16 Périodes</button>
+            <button type="button" class="ody-btn small ghost" data-a2="allames">🧠 36 Codes Natifs</button>
+            <button type="button" class="ody-btn small ghost" data-a2="radiorun">📻 Radio Lumière</button>
+          </div>
+          <div class="ody-tiles">
+            ${tile("soundlab", "👄", "Pronunciation Lab", "18 sounds + 6 Accent Detox drills")}
+            ${tile("gym", "🧠", "Native Gym", "Spoken French, definitions & culture")}
+            ${tile("writing", "✍️", "Writing Studio", "DALF writing missions")}
+            ${tile("forge", "⚒️", "Verb Forge", "94 verbs × 11 tenses")}
+            ${tile("cafe", "☕", "Le Café", "Visual-novel dialogues")}
+            ${tile("paris_sim", "🏙️", "Life in Paris", "3 registers in real districts")}
+            ${tile("radio", "📻", "Radio Paris", "Real French podcasts")}
+            ${tile("grammar", "📘", "Grammar", "Searchable rules")}
+            ${tile("codex", "📜", "Codex", "53 vocab themes")}
+            ${tile("grimoire", "📕", "Mistakes Book", "FSRS error vault")}
+            ${tile("worldmap", "🗺️", "62 Worlds Map", "Zoomable world map")}
+            ${tile("shop", "🪙", "Shop & Perks", "Spend your gold")}
+          </div>
+        </div>
+      </details>
+    </div></div>`;
+  }
+
   function renderHome() {
     if (!isPrivateAuthorized()) {
       renderPrivateLockGate();
@@ -7857,6 +9049,19 @@
     const main = $("app-main"); if (!main) return;
     const c = CH();
     if (!c.onboarded) return renderOnboarding(0);
+    // Cleanly discard any stale >10-step legacy marathon partial on non-exam/non-boss nodes (preserves all done stars/XP!)
+    if (c.partial && typeof c.partial === "object") {
+      let cleaned = false;
+      Object.keys(c.partial).forEach((k) => {
+        const nd = NODE_BY_ID[k];
+        if (nd && isStaleMarathonPartial(nd, c.partial[k])) {
+          delete c.partial[k];
+          if (c.activeNodeId === k) c.activeNodeId = null;
+          cleaned = true;
+        }
+      });
+      if (cleaned) persist();
+    }
     const nx = nextNode();
     const activeKey = c.activeNodeId;
     const isStandaloneActive = !!(activeKey && String(activeKey).startsWith("__mode:") && c.partial && hasPartialProgress(c.partial[activeKey]));
@@ -7864,129 +9069,34 @@
     const activeNode = (!isStandaloneActive && activeKey && c.partial && hasPartialProgress(c.partial[activeKey]) && !c.done[activeKey] && NODE_BY_ID[activeKey]) || nx;
     const activePart = c.partial && c.partial[activeNode.id];
     const isResuming = hasPartialProgress(activePart);
-    const meta = KIND_META[activeNode.kind] || {};
     const rv = reviewCards().length;
-    const name = c.name ? ` ${esc(c.name)}` : "";
-    const started = Object.keys(c.done).length > 0 || isResuming || isStandaloneActive;
     const daily = c.daily.date === today() ? c.daily : { xp: 0, sessions: 0, nodes: 0 };
-    const actLen = partStepLen(activePart);
-    const stndLen = partStepLen(standalonePart);
-    const progPct = isResuming ? Math.max(8, Math.round(((activePart.i + 1) / actLen) * 100)) : 0;
-    const modeProgPct = standalonePart ? Math.max(8, Math.round(((standalonePart.i + 1) / stndLen) * 100)) : 0;
-    const curTitle = c.equippedTitle || "🐣 Flâneur de la Seine";
     const mpActive = (activeNode.kind !== "gate" && activeNode.kind !== "natif" && activeNode.kind !== "boss") ? nodeMicroProgress(activeNode) : null;
-    const microDeckHtml = (mpActive && mpActive.total > 1) ? `<div class="ody-micro-deck">
-      <div class="micro-deck-head">
-        <span>⚡ <b>Micro-Modules (~90s chacun)</b> · ${mpActive.doneCount}/${mpActive.total} capsules verrouillées</span>
-        <small>Jouez 1 capsule entre deux cours ou toute l'étape d'un coup !</small>
-      </div>
-      <div class="micro-deck-pills">
-        ${mpActive.caps.map((cp) => {
-          const isDone = !!mpActive.doneMask[cp.idx];
-          const isNext = !isDone && cp.idx === mpActive.nextCapIdx;
-          return `<button type="button" class="micro-cap-btn ${isDone ? "done" : ""} ${isNext ? "next" : ""}" data-a2="microcap" data-id="${esc(activeNode.id)}" data-cap="${cp.idx}" title="Lancer ${esc(cp.title)} (${cp.steps.length} micro-actions · ~90 sec)">
-            <span class="mc-ic">${isDone ? "✅" : isNext ? "⚡" : "○"}</span>
-            <span class="mc-txt"><b>${esc(cp.title)}</b><small>${cp.steps.length} étapes · ~90s</small></span>
-          </button>`;
-        }).join("")}
-      </div>
-    </div>` : "";
-    main.innerHTML = `<div class="ody-home">
-      <div class="ody-home-main">
-        <section class="ody-hero">
-          ${camille("lg")}
-          <div class="ody-hero-txt">
-            <div class="ody-hello">Bonjour${name} ! · <span class="ody-rep-inline">⚜️ ${c.reputation || 0} Réputation</span> · <button type="button" class="ody-title-badge" data-a2="pantheon" title="Ouvrir le Panthéon des Immortels pour changer de titre">${esc(curTitle)}</button></div>
-            <div class="ody-next-k">${meta.icon || ""} ${esc(meta.label || "")} · ${esc(levelOfNode(activeNode))}${activeNode.unitObj && activeNode.unitObj.num ? ` · World ${activeNode.unitObj.num}` : ""}</div>
-            <div class="ody-next-t">${esc(activeNode.title)}</div>
-            ${isResuming ? `<div class="ody-hero-prog">⏳ Saved at <b>Step ${activePart.i + 1} of ${actLen}</b> (${progPct}%) <i class="pbar"><b style="width:${progPct}%"></b></i></div>` : ""}
-            ${isStandaloneActive ? `<div class="ody-hero-prog">⚡ En pause : <b>${esc(standalonePart.title || standalonePart.mode)} · Step ${standalonePart.i + 1} of ${stndLen}</b> (${modeProgPct}%)</div>` : ""}
-            ${microDeckHtml}
-          </div>
-          <div class="ody-hero-actions">
-            <button class="ody-btn primary huge" data-a2="go" data-id="${esc(activeNode.id)}" id="ody-primary">▶ ${isResuming ? `Resume (Step ${activePart.i + 1}/${actLen})` : started ? "Continue" : "Start"}</button>
-            ${mpActive && mpActive.total > 1 ? `<button class="ody-btn small micro-hero-btn" data-a2="microcap" data-id="${esc(activeNode.id)}" data-cap="${mpActive.nextCapIdx}">⚡ Capsule ${mpActive.nextCapIdx + 1}/${mpActive.total} (90s)</button>` : ""}
-            <button class="ody-btn ghost small" data-a2="quick60">⚡ Express 60s</button>
-            ${isResuming ? `<button class="ody-btn ghost small" data-a2="restart" data-id="${esc(activeNode.id)}">🔄 Restart from Step 1</button>` : ""}
-            ${isStandaloneActive ? `<button class="ody-btn ghost small" data-a2="resumemode" data-k="${esc(activeKey)}">▶ Resume ${esc(standalonePart.title || standalonePart.mode)} (${standalonePart.i + 1}/${stndLen})</button>` : ""}
-          </div>
-        </section>
-        ${parisDispatchHtml(activeNode, mpActive)}
-        ${levelStudioDeckHtml()}
-        ${chroniquesStripHtml()}
-        ${quatuorAndPathBarHtml()}
-        ${parisMapStripHtml()}
-        <div class="ody-neuro-bar">
-          <button class="ody-neuro-btn quick60" data-a2="quick60"><span class="ni">⚡</span><span><b>Capsule Express 60s</b><small>4 micro-actions · Dopamine &amp; Coffre</small></span></button>
-          <button class="ody-neuro-btn ame" data-a2="amerun"><span class="ni">🇫🇷</span><span><b>L'Âme &amp; Pensée Directe</b><small>36 réflexes natifs · Zéro traduction</small></span></button>
-          <button class="ody-neuro-btn amis" data-a2="amis"><span class="ni">🥂</span><span><b>Mes Amis de Paris</b><small>4 vrais amis · Zéro solitude · Vocal</small></span></button>
-          <button class="ody-neuro-btn blitz" data-a2="blitz"><span class="ni">🔥</span><span><b>Blitz Réflexe</b><small>6s speed wiring · zero English</small></span></button>
-          <button class="ody-neuro-btn shad" data-a2="shadowrun"><span class="ni">🎙️</span><span><b>Studio Shadowing</b><small>Native rhythm &amp; mouth muscle</small></span></button>
-          <button class="ody-neuro-btn imp" data-a2="improvrun"><span class="ni">🎭</span><span><b>Improv à Paris</b><small>Live street scenes · no MCQ</small></span></button>
-          <button class="ody-neuro-btn sleuth" data-a2="sleuthrun"><span class="ni">🕵️</span><span><b>Enquête &amp; Forge C2</b><small>Sleuth errors, verbs &amp; liaisons</small></span></button>
-          <button class="ody-neuro-btn joute" data-a2="jouterun"><span class="ni"><img src="assets/pixel_balance.png" class="ob-mini-px" alt="⚖️"></span><span><b>Joute Oratoire C2</b><small>Concession · Réfutation · Synthèse</small></span></button>
-          <button class="ody-neuro-btn idiome" data-a2="idiomerun"><span class="ni"><img src="assets/pixel_masque.png" class="ob-mini-px" alt="🎭"></span><span><b>Idiomes &amp; Litotes C2</b><small>18 sous-entendus &amp; Synthèse DALF</small></span></button>
-          <button class="ody-neuro-btn periode" data-a2="perioderun"><span class="ni"><img src="assets/pixel_plume.png" class="ob-mini-px" alt="✒️"></span><span><b>Architecte de la Période</b><small>16 périodes &amp; 18 modes (Subjonctif)</small></span></button>
-          <button class="ody-neuro-btn pantheon" data-a2="pantheon"><span class="ni"><img src="assets/pixel_pantheon.png" class="ob-mini-px" alt="🏛️"></span><span><b>Panthéon des Immortels</b><small>12 Sceaux de Paris &amp; Titres C2</small></span></button>
-        </div>
-        ${rv >= 1 ? `<button class="ody-review-card" data-a2="review"><span class="ic">🔁</span><span><b>Carnet de révision actif · ${Math.min(rv, 12)} expressions</b><small>Consolidez vos points fragiles avant qu'ils ne s'effacent.</small></span><span class="go">▶</span></button>` : ""}
-        <div class="ody-levels">${LEVELS.map((lv) => levelHtml(lv, activeNode)).join("")}</div>
-      </div>
-      <aside class="ody-side">
-        <div class="ody-panel">
-          <div class="ody-ring" style="--p:${Math.min(100, Math.round(daily.xp / c.goal * 100))}"><b>${daily.xp}</b><small>/ ${c.goal} XP</small></div>
-          <div class="ody-streak">🔥 <b>${SAVE().streak || 0}</b> day streak${(SAVE().streakFreezes || 0) ? ` · ❄️ ${SAVE().streakFreezes}` : ""}</div>
-        </div>
-        ${dailyContractsPanel()}
-        ${odysseyAtlasPanel()}
-        <div class="ody-panel"><div class="ody-panel-t">7 Compétences vers le C2</div>${skillPanel()}<div class="ody-gates">${gatesPanel()}</div><div class="ody-mini" style="margin-top:.5rem">${Object.values(c.gates).filter((g) => g && g.passed && !g.placed).length}/7 examens de niveau validés.</div></div>
-        <div class="ody-panel quick">
-          <button data-a2="allames">🇫🇷 36 Codes Natifs &amp; Pensée Directe</button>
-          <button data-a2="pantheon">🏛️ Panthéon &amp; Titres (12 Sceaux)</button>
-          <button data-a2="allperiodes">✒️ 16 Périodes &amp; Modes C2</button>
-          <button data-a2="allidiomes">🎭 18 Idiomes &amp; Litotes C2</button>
-          <button data-a2="jouterun">⚖️ Joute Oratoire C2</button>
-          <button data-a2="weakspot">🎯 Entraînement Ciblé</button>
-          <button data-a2="scene" data-s="soundlab">👄 Studio Phonétique</button>
-          <button data-a2="drawer">☰ Tous les Quartiers &amp; Modes</button>
-        </div>
-      </aside>
-    </div>`;
+    const tab = HOME.tab || "play";
+    if (tab === "paris") main.innerHTML = renderParisTab(activeNode, mpActive);
+    else if (tab === "studio") main.innerHTML = renderStudioTab(activeNode, daily, rv);
+    else main.innerHTML = renderPlayTab(activeNode, activePart, isResuming, isStandaloneActive, standalonePart, activeKey, rv, daily);
     updateBar();
-    setTimeout(() => { const el = document.querySelector(".ody-node.partial, .ody-node.cur"); if (el && el.getBoundingClientRect && el.getBoundingClientRect().bottom > window.innerHeight - 20) el.scrollIntoView({ block: "center", behavior: "smooth" }); }, 120);
   }
   function nodeSheet(n) {
     const meta = KIND_META[n.kind] || {}; const open = isUnlocked(n); const st = nodeStars(n);
     const part = CH().partial && CH().partial[n.id];
-    const hasPart = hasPartialProgress(part);
-    const mp = (open && n.kind !== "gate" && n.kind !== "natif" && n.kind !== "boss") ? nodeMicroProgress(n) : null;
+    const hasPart = hasPartialProgress(part) && !isStaleMarathonPartial(n, part);
     closeSheet();
     const d = document.createElement("div"); d.className = "ody-sheet-wrap"; d.id = "ody-sheet";
     const g = (n.kind === "gate" || n.kind === "natif") ? CH().gates[n.level] : null;
-    const microListHtml = (mp && mp.total > 1) ? `<div class="ody-sheet-micro">
-      <div class="ody-k-label">⚡ Micro-Modules (~90s chacun · ${mp.doneCount}/${mp.total} accomplis)</div>
-      <div class="micro-deck-pills">
-        ${mp.caps.map((cp) => {
-          const isDone = !!mp.doneMask[cp.idx];
-          const isNext = !isDone && cp.idx === mp.nextCapIdx;
-          return `<button type="button" class="micro-cap-btn ${isDone ? "done" : ""} ${isNext ? "next" : ""}" data-a2="microcap" data-id="${esc(n.id)}" data-cap="${cp.idx}">
-            <span class="mc-ic">${isDone ? "✅" : isNext ? "⚡" : "○"}</span>
-            <span class="mc-txt"><b>${esc(cp.title)}</b><small>${cp.steps.length} micro-actions · ~90 sec</small></span>
-          </button>`;
-        }).join("")}
-      </div>
-    </div>` : "";
+    const nTitle = isEnGuide() ? (n.enTitle || n.title) : n.title;
+    const isSilver = !!(st && CH().voicePending && CH().voicePending[n.id]);
     d.innerHTML = `<div class="ody-sheet">
-      <div class="ody-kind">${meta.icon || ""} ${esc(meta.label || "")} · ${esc(levelOfNode(n))}${n.unitObj && n.unitObj.num ? ` · World ${n.unitObj.num}` : ""}</div>
-      <h3>${esc(n.title)}</h3>
-      ${st ? `<div class="ody-stars small">${"⭐".repeat(st)}</div>` : ""}
-      ${hasPart ? `<div class="ody-goal small">⏳ Saved at Step ${part.i + 1} of ${partStepLen(part)} (${Math.max(8, Math.round(((part.i + 1) / partStepLen(part)) * 100))}%)</div>` : ""}
-      ${g ? `<div class="ody-goal small">Best score: ${g.best || g.score || 0}% ${g.passed ? "✔" : ""}</div>` : ""}
-      ${microListHtml}
-      ${open ? "" : `<p class="ody-goal small">🔒 Cette étape est en aval de votre position actuelle — mais vous pouvez la débloquer en 1 clic ci-dessous si vous souhaitez y accéder immédiatement.</p>`}
+      <div class="ody-kind">${meta.icon || ""} ${esc(ui(meta.enLabel || meta.label || "", meta.label || ""))} · ${esc(levelOfNode(n))} · ~${esc(meta.mins || "2–3 min")}</div>
+      <h3>${esc(nTitle)}</h3>
+      ${st ? `<div class="ody-stars small">${isSilver ? "🔇 " + ui("Voice Pending (Replay with Mic for Gold)", "Voix en attente (Rejouer au micro)") : "⭐".repeat(st)}</div>` : ""}
+      ${hasPart ? `<div class="ody-goal small">⏳ ${ui(`Saved at Step ${part.i + 1} of ${partStepLen(part)}`, `Sauvegardé à l'étape ${part.i + 1}/${partStepLen(part)}`)}</div>` : ""}
+      ${g ? `<div class="ody-goal small">${ui("Best score", "Meilleur score")}: ${g.best || g.score || 0}% ${g.passed ? "✔" : ""}</div>` : ""}
+      ${open ? "" : `<p class="ody-goal small">🔒 ${ui("Ahead on your path — unlock in 1 click below anytime.", "En aval sur le chemin — déblocable en 1 clic ci-dessous.")}</p>`}
       <div class="ody-row center">
-        ${open ? (hasPart ? `<button class="ody-btn primary" data-a2="go" data-id="${esc(n.id)}">▶ Resume (Step ${part.i + 1}/${partStepLen(part)})</button><button class="ody-btn ghost" data-a2="restart" data-id="${esc(n.id)}">🔄 Restart from Step 1</button>` : `<button class="ody-btn primary" data-a2="go" data-id="${esc(n.id)}">${st ? "🔁 Replay Full" : "▶ Start Full"}</button>${mp && mp.total > 1 ? `<button class="ody-btn small micro-hero-btn" data-a2="microcap" data-id="${esc(n.id)}" data-cap="${mp.nextCapIdx}">⚡ Capsule ${mp.nextCapIdx + 1}/${mp.total} (90s)</button>` : ""}`) : `<button class="ody-btn primary" data-a2="unlocknode" data-id="${esc(n.id)}">🔓 Débloquer &amp; Jouer maintenant</button>`}
-        <button class="ody-btn ghost" data-a2="closesheet">Close</button>
+        ${open ? (hasPart ? `<button class="ody-btn primary" data-a2="go" data-id="${esc(n.id)}">▶ ${ui(`Resume (Step ${part.i + 1}/${partStepLen(part)})`, `Reprendre (${part.i + 1}/${partStepLen(part)})`)}</button><button class="ody-btn ghost" data-a2="restart" data-id="${esc(n.id)}">🔄 ${ui("Restart", "Recommencer")}</button>` : `<button class="ody-btn primary" data-a2="go" data-id="${esc(n.id)}">${st ? ui("🔁 Replay", "🔁 Rejouer") : ui("▶ Play", "▶ Jouer")}</button>`) : `<button class="ody-btn primary" data-a2="unlocknode" data-id="${esc(n.id)}">🔓 ${ui("Unlock & Play", "Débloquer & Jouer")}</button>`}
+        <button class="ody-btn ghost" data-a2="closesheet">${ui("Close", "Fermer")}</button>
       </div></div>`;
     document.body.appendChild(d);
     d.addEventListener("click", (e) => { if (e.target === d) closeSheet(); });
@@ -8329,17 +9439,10 @@
     if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = "…"; }
     let replyData = null;
     try {
-      if (SERVED && IS_LOCAL_SERVER) {
-        const sysPrompt = `Tu es ${frObj.name} (${frObj.role}) à ${frObj.place}. Style: ${frObj.vibe}. L'apprenant s'appelle Sreenath (niveau actuel ${currentLevel()}). Réponds chaleureusement en français naturel (1 à 2 phrases) avec traduction anglaise, corrige gentiment son message s'il y a une faute, et propose 2 réponses simples.`;
-        const convoText = hist.slice(-6).map((m) => `${m.role === "user" ? "Sreenath" : frObj.name}: ${m.fr}`).join("\n");
-        const r = await fetch("/api/partner", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ system: sysPrompt, conversation: convoText })
-        });
-        const j = await r.json();
-        if (j && j.ok && j.data && j.data.reply_fr) replyData = j.data;
-      }
+      const sysPrompt = `Tu es ${frObj.name} (${frObj.role}) à ${frObj.place}. Style: ${frObj.vibe}. L'apprenant s'appelle Sreenath (niveau actuel ${currentLevel()}). Réponds chaleureusement en français naturel (1 à 2 phrases) avec traduction anglaise, corrige gentiment son message s'il y a une faute, et propose 2 réponses simples.`;
+      const convoText = hist.slice(-6).map((m) => `${m.role === "user" ? "Sreenath" : frObj.name}: ${m.fr}`).join("\n");
+      const j = await callAI("/api/partner", { system: sysPrompt, conversation: convoText });
+      if (j && j.ok && j.data && j.data.reply_fr) replyData = j.data;
     } catch (e) {}
     if (!replyData) {
       let hasErr = false, fixedMsg = msg, errWhy = "";
@@ -8410,7 +9513,11 @@
     if (n.kind === "mission" && !n.data) return;
     const s = SAVE(); if (n.stage) { s.currentLessonNum = n.stage.worldNum || (n.world && n.world.number); s.currentStageId = n.stage.stageId; }
     const part = force !== "restart" && CH().partial && CH().partial[n.id];
-    if (hasPartialProgress(part)) {
+    if (part && isStaleMarathonPartial(n, part)) {
+      delete CH().partial[n.id];
+      if (CH().activeNodeId === n.id) CH().activeNodeId = null;
+      persist();
+    } else if (hasPartialProgress(part)) {
       if (!Array.isArray(part.steps) || !part.steps.length) {
         if (part.microCap && typeof part.microCap.idx === "number") {
           const caps = getMicroCapsules(n);
@@ -8442,6 +9549,49 @@
   }
   const HOME_ACT = {
     go(el) { go(el.dataset.id); },
+    tab(el) {
+      const t = (el && el.dataset && el.dataset.tab) || "play";
+      HOME.tab = ["play", "paris", "studio"].includes(t) ? t : "play";
+      closeSheet(); closeDrawer();
+      SFX.tap();
+      if (HOME.tab !== "play") NAV.push({ kind: "tab", tab: HOME.tab });
+      renderHome();
+      window.scrollTo(0, 0);
+    },
+    playdossier(el) {
+      const did = (el && el.dataset && el.dataset.did) || "";
+      closeSheet(); closeDrawer();
+      const nd = NODE_BY_ID["dos:" + did];
+      if (nd) return go(nd.id, true);
+      const steps = buildDossierSession(did);
+      if (steps.length) startSession(null, steps, "dossier_" + did);
+    },
+    playjury(el) {
+      const jid = (el && el.dataset && el.dataset.jid) || "";
+      closeSheet(); closeDrawer();
+      const nd = NODE_BY_ID["jury:" + jid];
+      if (nd) return go(nd.id, true);
+      const steps = buildJurySession(jid);
+      if (steps.length) startSession(null, steps, "jury_" + jid);
+    },
+    playessec(el) {
+      const sid = (el && el.dataset && el.dataset.sid) || "";
+      closeSheet(); closeDrawer();
+      const nd = NODE_BY_ID["essec:" + sid];
+      if (nd) return go(nd.id, true);
+      const steps = buildEssecSession(sid);
+      if (steps.length) startSession(null, steps, "essec_" + sid);
+    },
+    saveai() {
+      const kEl = $("ody-byok-in"), lEl = $("ody-lan-in");
+      if (kEl) setByokKey(kEl.value);
+      if (lEl) setLanUrl(lEl.value);
+      checkServer().then(() => {
+        SFX.ok();
+        toast("🤖 AI Coach Saved (Device-Local Only)", getByokKey() ? "Direct Gemini HTTPS enabled on this device." : getLanUrl() ? "LAN PC Server URL saved." : "Cleared — offline anti-gibberish grader active.", "🤖");
+        openDrawer();
+      });
+    },
     back() { NAV.back(); },
     openexplorepicker() { openExplorePickerSheet(); },
     explore(el) {
@@ -8732,12 +9882,15 @@
     },
     toggleuilang() {
       const c = CH();
-      c.uiLang = isEnGuide() ? "fr" : "en";
+      const nextLang = isEnGuide() ? "fr" : "en";
+      c.uiLang = nextLang;
+      c.langMode = nextLang;
       persist();
       SFX.tap();
       updateBar();
+      if ($("ody-drawer")) openDrawer();
       if (!SES && document.body.dataset.scene === "home") renderHome();
-      toast(c.uiLang === "en" ? "🇬🇧 Beginner Guide (EN+FR) Active" : "🇫🇷 Mode Immersion 100% Français", c.uiLang === "en" ? "Clear English guidance paired with French keywords." : "Toute l'interface passe en immersion française.", c.uiLang === "en" ? "🇬🇧" : "🇫🇷");
+      toast(nextLang === "en" ? "🇬🇧 Beginner Guide (EN+FR) Active" : "🇫🇷 Mode Immersion 100% Français", nextLang === "en" ? "Clear English guidance paired with authentic French." : "Toute l'interface passe en immersion française.", nextLang === "en" ? "🇬🇧" : "🇫🇷");
     },
     rerolldispatch() {
       DISPATCH_IDX = (DISPATCH_IDX + 1) % PARIS_DISPATCHES.length;
@@ -8870,84 +10023,62 @@
   function updateBar() {
     const bar = ensureBar(); if (!NODES.length) return;
     const s = SAVE(), c = CH(); const daily = c.daily.date === today() ? c.daily : { xp: 0 };
-    const rv = reviewCards().length;
     const lvl = currentLevel();
     const curScene = document.body.dataset.scene || "home";
+    const tab = HOME.tab || "play";
     bar.innerHTML = `
-      ${curScene !== "home" ? `<button type="button" class="ob-back" data-a2="back" title="Retour (Échap / Alt+←)">← Retour</button>` : ""}
-      <button class="ob-home" data-a2="home" title="Your path"><img src="assets/odyssee_icon.png?v=27.0" class="ob-pixel-icon" alt=""> <span>L'Odyssée</span></button>
-      <span class="ob-lvl" title="Current level">${lvl === "NATIF" ? "👑" : lvl}</span>
-      <button class="ob-stat btn ob-nav-pill ob-vis-pill" data-a2="openexplorepicker" title="Regarder & Toucher · 10 Scènes Visuelles de Paris (0 anglais)">🗺️ Explorer</button>
-      <button class="ob-stat btn ob-nav-pill ob-chr-pill" data-a2="chroniques" title="Les Chroniques de Paris · 6 Épisodes Narratifs A1→C2">🎬 Chroniques</button>
-      <button class="ob-stat btn ob-nav-pill ob-quick-pill" data-a2="swipe" title="Arcade Swipe Réflexe · Glissez ⬅️/➡️ par niveau A1→C2">⚡ Swipe</button>
-      <button class="ob-stat btn ob-nav-pill" data-a2="amis" title="Le Téléphone de Paris · Camille, Yanis, Céleste & Valcourt">📱 Amis</button>
-      <button class="ob-stat btn ob-nav-pill" data-a2="pantheon" title="Panthéon des Immortels & Sceaux A1→C2"><img src="assets/pixel_pantheon.png" class="ob-mini-px" alt=""> Panthéon</button>
-      <button class="ob-stat btn ob-nav-pill" data-a2="atlas" title="Atlas de Maîtrise A1 → C2">🗺️ Atlas</button>
-      <button class="ob-stat btn ob-nav-pill ${CLOUD_SYNC.status === "synced" ? "ok" : ""}" id="ob-cloud-pill" data-a2="cloudsync" title="Synchronisation Bidirectionnelle Tablette Redmi Pad 2 Pro 5G ↔ PC">☁️ Sync ✓</button>
-      <button class="ob-stat btn ob-nav-pill" id="ob-lang-pill" data-a2="toggleuilang" title="Switch between Beginner English+French Guide and 100% French Immersion">${isEnGuide() ? "🇬🇧 EN+FR" : "🇫🇷 FR"}</button>
-      <div class="ob-sp"></div>
-      <span class="ob-stat" title="Day streak">🔥 ${s.streak || 0}</span>
-      <span class="ob-stat ${daily.xp >= c.goal ? "ok" : ""}" title="Today's XP / daily goal">⚡ ${daily.xp}/${c.goal}</span>
-      <span class="ob-stat" title="Réputation Parisienne">⚜️ ${c.reputation || 0}</span>
-      <span class="ob-stat" title="Gold">🪙 ${(s.gold || 0).toLocaleString()}</span>
-      ${rv >= 1 ? `<button class="ob-stat btn" data-a2="review" title="Phrases to review">🔁 ${Math.min(rv, 99)}</button>` : ""}
-      <button class="ob-stat btn" data-a2="sfx" id="ob-sfx" title="Sound effects">${window.RPG_SFX && window.RPG_SFX.muted ? "🔇" : "🔊"}</button>
-      <button class="ob-menu" data-a2="drawer">☰ <span>Menu</span></button>`;
+      <div class="ob-left">
+        ${curScene !== "home" ? `<button type="button" class="ob-back" data-a2="back" title="${ui("Back (Esc / Alt+←)", "Retour (Échap / Alt+←)")}">← ${ui("Back", "Retour")}</button>` : ""}
+        <button class="ob-home" data-a2="tab" data-tab="play" title="L'Odyssée · Play"><img src="assets/odyssee_icon.png?v=28.0" class="ob-pixel-icon" alt=""> <span>L'Odyssée</span></button>
+        <span class="ob-lvl" title="Current CEFR level">${lvl === "NATIF" ? "👑" : lvl}</span>
+      </div>
+      <nav class="ody-tabs" role="tablist" aria-label="Main navigation">
+        <button type="button" class="ody-tab-btn ${curScene === "home" && tab === "play" ? "active" : ""}" data-a2="tab" data-tab="play">▶ ${ui("Play", "Jouer")}</button>
+        <button type="button" class="ody-tab-btn ${curScene === "home" && tab === "paris" ? "active" : ""}" data-a2="tab" data-tab="paris">🗺️ Paris</button>
+        <button type="button" class="ody-tab-btn ${curScene === "home" && tab === "studio" ? "active" : ""}" data-a2="tab" data-tab="studio">🎯 Studio</button>
+      </nav>
+      <div class="ob-right">
+        <span class="ody-vitals-pill ${daily.xp >= c.goal ? "ok" : ""}" title="${ui("Streak · Today's XP · Reputation · Gold", "Série · XP · Réputation · Or")}">🔥 ${s.streak || 0} · ⚡ ${daily.xp}/${c.goal}</span>
+        <button class="ob-stat btn ${CLOUD_SYNC.status === "synced" ? "ok" : ""}" id="ob-cloud-pill" data-a2="cloudsync" title="Cloud Sync Tablet ↔ PC">☁️ ✓</button>
+        <button class="ob-menu" data-a2="drawer" title="${ui("Settings & Menu", "Paramètres & Menu")}">☰ <span>Menu</span></button>
+      </div>`;
   }
   HOME_ACT.sfx = () => { if (window.RPG_SFX) { window.RPG_SFX.muted = !window.RPG_SFX.muted; } updateBar(); };
   function openDrawer() {
     closeDrawer();
     const c = CH(), s = SAVE();
     const d = document.createElement("div"); d.id = "ody-drawer"; d.className = "ody-drawer-wrap";
-    const tile = (sc, ic, t, sub) => `<button class="ody-tile-m" data-a2="scene" data-s="${sc}"><span class="ic">${ic}</span><b>${t}</b><small>${sub}</small></button>`;
+    const byokVal = getByokKey();
+    const lanVal = getLanUrl();
     d.innerHTML = `<div class="ody-drawer">
-      <div class="ody-row between"><h3><img src="assets/odyssee_icon.png?v=27.0" class="ob-pixel-icon" alt=""> Menu · L'Odyssée v27.0</h3><button class="ody-btn ghost small" data-a2="closedrawer">✕</button></div>
-      <button class="ody-tile-m wide" data-a2="openexplorepicker"><span class="ic">🗺️</span><b>Explorer Paris en Images (Regarder &amp; Toucher)</b><small>10 scènes illustrées interactives A1→C2 · Touchez les objets &amp; Chasse Audio (0 anglais)</small></button>
-      <button class="ody-tile-m wide" data-a2="chroniques"><span class="ic">🎬</span><b>Les Chroniques de Paris (A1 → C2)</b><small>6 épisodes narratifs vivants · 30 scènes illustrées (Écouter · Lire · Écrire · Parler)</small></button>
-      <button class="ody-tile-m wide" data-a2="home"><span class="ic">🧭</span><b>Carte &amp; Odyssée</b><small>62 Mondes, Synergie A1→C2, Micro-Capsules 90s, Quartiers, Ateliers &amp; Examens</small></button>
-      <button class="ody-tile-m wide" data-a2="cloudsync"><span class="ic">☁️</span><b>Tablette Redmi Pad 2 Pro 5G &amp; Sync Cloud</b><small>Synchronisation automatique Tablette ↔ PC &amp; Clavier Français Logitech</small></button>
-      <button class="ody-tile-m wide" data-a2="atlas"><span class="ic">🗺️</span><b>Atlas de Maîtrise C2</b><small>Les 6 Époques (A1 → C2 → Natif) &amp; 7 Compétences sans limite de temps</small></button>
-      <div class="ody-k-label">Quartiers, Micro-Modules &amp; Studios C2</div>
+      <div class="ody-row between"><h3><img src="assets/odyssee_icon.png?v=28.0" class="ob-pixel-icon" alt=""> ${ui("Settings & Menu", "Paramètres & Menu")} · v28.0</h3><button class="ody-btn ghost small" data-a2="closedrawer">✕</button></div>
+      <div class="ody-k-label">${ui("Quick Navigation", "Navigation Rapide")}</div>
       <div class="ody-tiles">
-        <button class="ody-tile-m" data-a2="quick60"><span class="ic">⚡</span><b>Capsule Express 60s</b><small>4 micro-défis · Dopamine &amp; Coffre</small></button>
-        <button class="ody-tile-m" data-a2="amerun"><span class="ic">🇫🇷</span><b>Âme &amp; Pensée Directe</b><small>18 codes sociaux + 18 pensées A1→C2</small></button>
-        <button class="ody-tile-m" data-a2="allames"><span class="ic">🧠</span><b>Codex 36 Réflexes Natifs</b><small>Zéro traduction · Vrai français parlé</small></button>
-        <button class="ody-tile-m" data-a2="amis"><span class="ic">🥂</span><b>Mes Amis de Paris</b><small>Camille, Yanis, Céleste &amp; Valcourt</small></button>
-        <button class="ody-tile-m" data-a2="pantheon"><span class="ic"><img src="assets/pixel_pantheon.png" class="ob-mini-px" alt="🏛️"></span><b>Panthéon C2</b><small>12 Sceaux de Paris &amp; Titres</small></button>
-        <button class="ody-tile-m" data-a2="perioderun"><span class="ic"><img src="assets/pixel_plume.png" class="ob-mini-px" alt="✒️"></span><b>Période &amp; Modes</b><small>16 périodes &amp; 18 concordances</small></button>
-        <button class="ody-tile-m" data-a2="alldistricts"><span class="ic">🏙️</span><b>10 Quartiers</b><small>Gare du Nord → Sous la Coupole C2</small></button>
-        <button class="ody-tile-m" data-a2="allateliers"><span class="ic">✒️</span><b>12 Ateliers C2</b><small>Rhétorique, style &amp; Grand Oral</small></button>
-        <button class="ody-tile-m" data-a2="jouterun"><span class="ic">⚖️</span><b>Joute Oratoire</b><small>Concession · Réfutation · Synthèse</small></button>
-        <button class="ody-tile-m" data-a2="allidiomes"><span class="ic">🎭</span><b>18 Idiomes &amp; Litotes</b><small>Expressions figurées &amp; sous-entendus</small></button>
-        <button class="ody-tile-m" data-a2="sleuthrun"><span class="ic">🕵️</span><b>Enquête &amp; Forge</b><small>Pièges C2, 94 verbes &amp; liaisons</small></button>
-        <button class="ody-tile-m" data-a2="review"><span class="ic">🔁</span><b>Carnet SRS</b><small>Révision espacée + vos erreurs</small></button>
-        <button class="ody-tile-m" data-a2="weakspot"><span class="ic">🎯</span><b>Point Faible</b><small>Entraînement ciblé sur vos lacunes</small></button>
-        ${tile("soundlab", "👄", "Pronunciation lab", "French sounds, minimal pairs, mouth position")}
-        ${tile("gym", "🧠", "Native gym", "Spoken French, definitions, culture, scenes")}
-        ${tile("writing", "✍️", "Writing studio", "DALF-style writing missions")}
-        ${tile("forge", "⚒️", "Verb forge", "94 verbs × every tense")}
-        ${tile("cafe", "☕", "Le Café", "Visual-novel dialogues")}
-        ${tile("paris_sim", "🏙️", "Life in Paris", "Real-life situations in 3 registers")}
-        ${tile("radio", "📻", "Radio Paris", "Real French podcasts and shows")}
+        <button class="ody-tile-m" data-a2="tab" data-tab="play"><span class="ic">▶</span><b>${ui("Play · Golden Path", "Jouer · Le Chemin")}</b><small>${ui("Your single calm French sequence", "Votre parcours pas à pas")}</small></button>
+        <button class="ody-tile-m" data-a2="tab" data-tab="paris"><span class="ic">🗺️</span><b>Paris</b><small>${ui("Friends, ESSEC, Explore & Stories", "Amis, ESSEC, Scènes & Chroniques")}</small></button>
+        <button class="ody-tile-m" data-a2="tab" data-tab="studio"><span class="ic">🎯</span><b>Studio</b><small>${ui("Drills, DALF C2 Readiness & Library", "Exercices, DALF C2 & Bibliothèque")}</small></button>
+        <button class="ody-tile-m" data-a2="cloudsync"><span class="ic">☁️</span><b>${ui("Cloud Sync", "Sync Cloud")}</b><small>Redmi Pad ↔ PC · 🪙 ${(s.gold || 0).toLocaleString()} · ⚜️ ${c.reputation || 0}</small></button>
       </div>
-      <div class="ody-k-label">Reference & rewards</div>
-      <div class="ody-tiles">
-        ${tile("grammar", "📘", "Grammar", "Every rule, searchable")}
-        ${tile("codex", "📜", "Codex", "Vocabulary themes")}
-        ${tile("grimoire", "📕", "Mistakes book", "Everything you got wrong")}
-        <button class="ody-tile-m" data-a2="portfolio"><span class="ic">📓</span><b>My writing</b><small>Every text you've written + scores</small></button>
-        ${tile("worldmap", "🗺️", "World map", "The 62 worlds")}
-        ${tile("shop", "🪙", "Shop & trophies", "Spend your gold")}
-      </div>
-      <div class="ody-k-label">Settings</div>
+      <div class="ody-k-label">${ui("Language & Audio Settings", "Langue & Audio")}</div>
       <div class="ody-settings">
-        <div class="ody-row"><span>Your name</span><input id="ody-name" class="ody-input small" value="${esc(c.name || "")}" placeholder="Name"><button class="ody-btn small" data-a2="savename">Save</button></div>
-        <div class="ody-row"><span>Daily goal</span>${[30, 60, 100, 150].map((v) => `<button class="ody-btn small ${c.goal === v ? "primary" : "ghost"}" data-a2="goal" data-v="${v}">${v} XP</button>`).join("")}</div>
-        <div class="ody-row"><span>Auto-play French audio</span><button class="ody-btn small ${c.autoAudio ? "primary" : "ghost"}" data-a2="autoaudio">${c.autoAudio ? "On" : "Off"}</button><button class="ody-btn small ghost" data-a2="soundtest">🔊 Test the voice</button></div>
-        <div class="ody-row"><span>Microphone</span><button class="ody-btn small ghost" data-a2="mictest">🎙️ Test the mic</button><span id="ody-mictest" class="ody-mini"></span></div>
-        <div class="ody-row"><span>Free roam (unlock everything)</span><button class="ody-btn small ${s.freeRoamUnlocked ? "primary" : "ghost"}" data-a2="freeroam">${s.freeRoamUnlocked ? "On" : "Off"}</button></div>
-        <div class="ody-row"><span>Placement test</span><button class="ody-btn small ghost" data-a2="placement">🧭 Find my level</button><button class="ody-btn small ghost" data-a2="exportsave">💾 Export my save</button></div>
-        <div class="ody-mini">Audio: ${SERVED ? "local server with offline cache ✅" : "direct mode — use the desktop shortcut for the most reliable audio"} · Sauvegarde disque automatique ✅ · ${esc(window.ODYSSEE_VERSION || "")}</div>
+        <div class="ody-row"><span>${ui("Interface Language", "Langue de l'interface")}</span><button class="ody-btn small primary" id="ob-lang-pill" data-a2="toggleuilang">${isEnGuide() ? "🇬🇧 EN+FR Guide" : "🇫🇷 100% Français"}</button></div>
+        <div class="ody-row"><span>${ui("Your name", "Votre prénom")}</span><input id="ody-name" class="ody-input small" value="${esc(c.name || "")}" placeholder="Name"><button class="ody-btn small" data-a2="savename">${ui("Save", "OK")}</button></div>
+        <div class="ody-row"><span>${ui("Daily goal", "Objectif quotidien")}</span>${[30, 60, 100, 150].map((v) => `<button class="ody-btn small ${c.goal === v ? "primary" : "ghost"}" data-a2="goal" data-v="${v}">${v} XP</button>`).join("")}</div>
+        <div class="ody-row"><span>${ui("Auto-play French audio", "Audio français auto")}</span><button class="ody-btn small ${c.autoAudio ? "primary" : "ghost"}" data-a2="autoaudio">${c.autoAudio ? "On" : "Off"}</button><button class="ody-btn small ghost" data-a2="soundtest">🔊 ${ui("Test Voice", "Tester")}</button><button class="ody-btn small ghost" data-a2="sfx" id="ob-sfx">${window.RPG_SFX && window.RPG_SFX.muted ? "🔇 SFX Off" : "🔊 SFX On"}</button></div>
+        <div class="ody-row"><span>${ui("Microphone", "Microphone")}</span><button class="ody-btn small ghost" data-a2="mictest">🎙️ ${ui("Test Mic", "Tester le micro")}</button><span id="ody-mictest" class="ody-mini"></span></div>
+      </div>
+      <div class="ody-k-label">🤖 ${ui("AI Coach & Examiner (Optional · Tablet PWA Parity)", "Coach IA & Jury DALF C2 (Optionnel · Tablette)")}</div>
+      <div class="ody-settings">
+        <div class="ody-mini" style="margin-bottom:.35rem">${ui("Stored strictly on this device only (never synced to Cloud). Enables live AI Friends, Audio Pronunciation Coaching, 50-pt DALF C2 Grading & Live Jury Debates on Redmi Pad.", "Stocké uniquement sur cet appareil (jamais synchronisé dans le Cloud). Active l'IA en direct sur votre tablette.")}</div>
+        <div class="ody-row"><span>Gemini API Key</span><input id="ody-byok-in" class="ody-input small" type="password" autocomplete="off" spellcheck="false" value="${esc(byokVal)}" placeholder="AIza… (optional)"></div>
+        <div class="ody-row"><span>LAN PC Server URL</span><input id="ody-lan-in" class="ody-input small" type="url" autocomplete="off" spellcheck="false" value="${esc(lanVal)}" placeholder="http://192.168.x.x:8765 (optional)"></div>
+        <div class="ody-row"><button class="ody-btn small primary" id="ody-save-ai-btn" data-a2="saveai">💾 ${ui("Save AI Settings", "Enregistrer IA")}</button><span class="ody-mini">${byokVal ? "✅ Gemini BYOK active" : lanVal ? "✅ LAN Server active" : IS_LOCAL_SERVER ? "✅ Local PC Server" : "Offline local grader active"}</span></div>
+      </div>
+      <div class="ody-k-label">${ui("Advanced & Data", "Avancé & Sauvegarde")}</div>
+      <div class="ody-settings">
+        <div class="ody-row"><span>${ui("Free roam (unlock all)", "Accès libre total")}</span><button class="ody-btn small ${s.freeRoamUnlocked ? "primary" : "ghost"}" data-a2="freeroam">${s.freeRoamUnlocked ? "On" : "Off"}</button></div>
+        <div class="ody-row"><span>${ui("Tools", "Outils")}</span><button class="ody-btn small ghost" data-a2="placement">🧭 ${ui("Placement Test", "Test de niveau")}</button><button class="ody-btn small ghost" data-a2="exportsave">💾 ${ui("Export Save", "Exporter (.json)")}</button></div>
+        <div class="ody-mini">${esc(window.ODYSSEE_VERSION || "v28.0")} · 🪙 ${(s.gold || 0).toLocaleString()} Gold · ⚜️ ${c.reputation || 0} Rep</div>
       </div></div>`;
     document.body.appendChild(d);
     d.addEventListener("click", (e) => { if (e.target === d) closeDrawer(); });
@@ -9045,8 +10176,13 @@
       return;
     }
     if (e.key === "Enter") {
-      if (st.k === "write" && inInput && !e.ctrlKey && !SES.answered) return;
-      if ((st.k === "speakfree" || st.k === "speak" || st.k === "match" || st.k === "explore" || st.k === "swipe" || st.k === "visreflex") && !SES.answered) return;
+      if ((st.k === "write" || st.k === "dossier") && inInput && !e.ctrlKey && !SES.answered) return;
+      if (st.k === "radio" && document.activeElement && document.activeElement.id === "ody-radio-notes") return;
+      if (st.k === "jury" && document.activeElement && document.activeElement.id === "ody-jury-in") {
+        if (!e.shiftKey) { e.preventDefault(); ACT.jurysend(); }
+        return;
+      }
+      if ((st.k === "speakfree" || st.k === "speak" || st.k === "match" || st.k === "explore" || st.k === "swipe" || st.k === "visreflex" || st.k === "dossier" || st.k === "jury") && !SES.answered) return;
       if (["mcq", "listen", "dialogue", "reflex", "quest", "register", "radio", "enquete", "liaison", "forgeron", "joute", "idiome", "synthese", "periode", "concordance", "ame", "pensee"].includes(st.k) && !SES.answered) return;
       e.preventDefault();
       if (SES.answered) return ACT.next();
@@ -9111,7 +10247,7 @@
     window.ODY_HOME = renderHome;
     window.ODY_BACK = () => NAV.back();
     window.speakFrench = (t, r) => speak(t, r);
-    Object.assign(window.ODY, { go, prev, NAV, startSession, startMicroCapsule, getMicroCapsules, nodeMicroProgress, activeArcCards, buildQuick60Session, buildPillarRepSession, buildChroniqueSession, openChroniquesSheet, buildExploreSession, openExplorePickerSheet, buildVisReflexSteps, buildSwipeSession, computeNativeUpgrade, openAmisSheet, sendAmisMessage, AMIS_DE_PARIS, AME_CASES, PENSEE_CASES, buildAmeSteps, buildPenseeSteps, buildAmeSession, openAmeSheet, levelSynergyBarHtml, levelMasteryBarHtml, levelNodes, buildSessionFor, buildExamSession, buildReviewSession, buildPlacementSession, buildBlitzSession, buildShadowSession, buildImprovSession, buildSleuthForgeSession, buildJouteSession, buildJouteSteps, buildIdiomeSession, buildIdiomeSteps, buildSyntheseSteps, buildPeriodeSession, buildPeriodeSteps, buildConcordanceSteps, buildEnqueteSteps, buildLiaisonSteps, buildForgeronSteps, buildQuestSteps, buildWeakSpotSession, buildDistrictSession, buildAtelierSession, openCollectionSheet, openIdiomeSheet, openPeriodeSheet, openPantheonSheet, openCloudSyncSheet, pullFromCloud, pushToCloudNow, mergeExternalSave, isPrivateAuthorized, unlockPrivateGate, renderPrivateLockGate, PRIV_KEY, CLOUD_SYNC, TABLET_PWA_URL, renderHome, renderOdysseyAtlas, renderPlan90, hasPartialProgress, savePartial, state: () => SES, cur, ACT, HOME_ACT, reviewCards, levelOfNode, currentLevel });
+    Object.assign(window.ODY, { HOME, ui, isEnGuide, skillMasteryPct, evaluateFrenchLocal, callAI, getByokKey, setByokKey, getLanUrl, setLanUrl, buildSoundMiniSession, buildEssecSession, buildMemoryLockSession, buildDossierSession, buildJurySession, buildRadioMilestoneSession, go, prev, NAV, startSession, startMicroCapsule, getMicroCapsules, nodeMicroProgress, activeArcCards, buildQuick60Session, buildPillarRepSession, buildChroniqueSession, openChroniquesSheet, buildExploreSession, openExplorePickerSheet, buildVisReflexSteps, buildSwipeSession, computeNativeUpgrade, openAmisSheet, sendAmisMessage, AMIS_DE_PARIS, AME_CASES, PENSEE_CASES, buildAmeSteps, buildPenseeSteps, buildAmeSession, openAmeSheet, levelSynergyBarHtml, levelMasteryBarHtml, levelNodes, buildSessionFor, buildExamSession, buildReviewSession, buildPlacementSession, buildBlitzSession, buildShadowSession, buildImprovSession, buildSleuthForgeSession, buildJouteSession, buildJouteSteps, buildIdiomeSession, buildIdiomeSteps, buildSyntheseSteps, buildPeriodeSession, buildPeriodeSteps, buildConcordanceSteps, buildEnqueteSteps, buildLiaisonSteps, buildForgeronSteps, buildQuestSteps, buildWeakSpotSession, buildDistrictSession, buildAtelierSession, openCollectionSheet, openIdiomeSheet, openPeriodeSheet, openPantheonSheet, openCloudSyncSheet, pullFromCloud, pushToCloudNow, mergeExternalSave, isPrivateAuthorized, unlockPrivateGate, renderPrivateLockGate, PRIV_KEY, CLOUD_SYNC, TABLET_PWA_URL, renderHome, renderOdysseyAtlas, renderPlan90, hasPartialProgress, savePartial, state: () => SES, cur, ACT, HOME_ACT, reviewCards, levelOfNode, currentLevel });
     document.body.classList.add("ody14");
     if (!isPrivateAuthorized()) {
       renderPrivateLockGate();
