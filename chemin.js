@@ -26,11 +26,11 @@
   const SERVED = /^https?:$/.test(location.protocol);
   const IS_LOCAL_SERVER = /^(127\.0\.0\.1|localhost)$/.test(location.hostname) || location.port === "8765";
   const PRIV_KEY = "srt_ody24_7f9a3e1c8b4d2065a9e4";
-  const OWNER_EMAIL = "sreenath8srt@gmail.com";
+  const PRIV_HASH = "f3b2749e4fe39031bed94d90ce85d90a50691d2ef1637d73ae145f66bef9299b";
   const PRIV_STORAGE_KEY = "ODYSSEE_PRIVATE_AUTH_V24";
   const CLOUD_TOPIC = "odyssee_srt_priv24_8e3f9a1c7b2d4065e9a2c4f8";
   const CLOUD_GIST_ID = "6828a599232d8fea3069b7b45a4b14dd";
-  const TABLET_PWA_URL = "https://dabi-init.github.io/odyssee-francaise/?k=srt_ody24_7f9a3e1c8b4d2065a9e4&v=24.0";
+  const TABLET_PWA_URL = "https://dabi-init.github.io/odyssee-francaise/?k=srt_ody24_7f9a3e1c8b4d2065a9e4&v=25.0";
   const CLOUD_SYNC = {
     hydrated: false,
     syncing: false,
@@ -39,6 +39,16 @@
     status: "ready",
     timer: null
   };
+
+  async function sha256Hex(str) {
+    try {
+      const buf = new TextEncoder().encode(String(str || ""));
+      const hashBuf = await crypto.subtle.digest("SHA-256", buf);
+      return Array.from(new Uint8Array(hashBuf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+    } catch (e) {
+      return "";
+    }
+  }
 
   function checkUrlPrivateKey() {
     try {
@@ -72,20 +82,26 @@
     }
   }
 
-  function unlockPrivateGate(inputVal) {
-    const clean = String(inputVal || "").trim().toLowerCase();
-    if (clean === OWNER_EMAIL || clean === PRIV_KEY.toLowerCase() || clean === "sreenath8srt") {
+  async function unlockPrivateGate(emailVal, pinVal) {
+    const cleanEmail = String(emailVal || "").trim().toLowerCase();
+    const cleanPin = String(pinVal || "").trim().toLowerCase();
+    let ok = (cleanEmail === PRIV_KEY.toLowerCase() || cleanPin === PRIV_KEY.toLowerCase());
+    if (!ok && cleanEmail && cleanPin) {
+      const digest = await sha256Hex(`${cleanEmail}|${cleanPin}`);
+      if (digest === PRIV_HASH) ok = true;
+    }
+    if (ok) {
       try { localStorage.setItem(PRIV_STORAGE_KEY, PRIV_KEY); } catch (e) {}
       window.__odyForceGateTest = false;
       document.body.classList.remove("ody-locked");
       ensureBar();
       renderHome();
       pullFromCloud(true);
-      toast("🔓 Accès Privé Autorisé", "Bienvenue Sreenath ! Votre tablette est déverrouillée de façon permanente.", "👑");
+      toast("🔓 Accès Privé Autorisé", "Bienvenue ! Votre tablette est déverrouillée de façon permanente.", "👑");
       return true;
     }
     const errEl = document.getElementById("ody-priv-err");
-    if (errEl) errEl.textContent = "⛔ Accès refusé : cet espace est strictement réservé à sreenath8srt@gmail.com.";
+    if (errEl) errEl.textContent = "⛔ Accès refusé : identifiant ou code PIN incorrect.";
     SFX.bad();
     return false;
   }
@@ -99,27 +115,26 @@
       <div class="ody-private-gate" id="ody-private-gate">
         <div class="priv-gate-card">
           <div class="priv-gate-badge">🔒 ESPACE PRIVÉ EXCLUSIF · ACCÈS RESTREINT</div>
-          <img src="assets/odyssee_icon.png?v=24.0" class="priv-gate-icon" alt="">
+          <img src="assets/odyssee_icon.png?v=25.0" class="priv-gate-icon" alt="">
           <h2>L'Odyssée Française · Édition Privée</h2>
-          <p class="priv-gate-sub">Cette application et sa sauvegarde Cloud sont strictement privées et réservées exclusivement à leur propriétaire (<b>sreenath8srt@gmail.com</b>). Aucun accès public n'est autorisé.</p>
+          <p class="priv-gate-sub">Cet espace d'apprentissage et sa sauvegarde Cloud sont strictement privés et réservés exclusivement à leur propriétaire. Aucun accès public n'est autorisé.</p>
           <div class="priv-gate-form">
-            <label for="ody-priv-in">🔑 Identifiant du propriétaire pour déverrouiller cet appareil :</label>
-            <input id="ody-priv-in" class="ody-input" type="email" autocomplete="email" spellcheck="false" placeholder="Entrez votre adresse e-mail propriétaire…">
-            <button type="button" class="ody-btn primary big" id="ody-priv-btn" data-a2="privunlock">🔓 Déverrouiller ma Tablette de façon permanente ▸</button>
+            <label for="ody-priv-in">🔑 Adresse e-mail du propriétaire :</label>
+            <input id="ody-priv-in" class="ody-input" type="email" autocomplete="email" spellcheck="false" placeholder="Adresse e-mail autorisée…">
+            <label for="ody-priv-pin">🛡️ Code PIN privé :</label>
+            <input id="ody-priv-pin" class="ody-input" type="password" autocomplete="current-password" spellcheck="false" placeholder="Code PIN…">
+            <button type="button" class="ody-btn primary big" id="ody-priv-btn" data-a2="privunlock">🔓 Déverrouiller cet appareil de façon permanente ▸</button>
             <div class="priv-gate-err" id="ody-priv-err"></div>
           </div>
-          <div class="priv-gate-hint">💡 Astuce : vous pouvez aussi ouvrir directement le fichier <b>OUVRIR_SUR_REDMI_PAD</b> depuis votre Google Drive privé (<i>sreenath8srt@gmail.com</i>) pour déverrouiller en un tap.</div>
+          <div class="priv-gate-hint">💡 Astuce : ouvrez simplement le raccourci privé dans votre Google Drive pour déverrouiller votre tablette en un tap.</div>
         </div>
       </div>`;
     const inp = document.getElementById("ody-priv-in");
-    if (inp) {
-      inp.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          unlockPrivateGate(inp.value);
-        }
-      });
-    }
+    const pin = document.getElementById("ody-priv-pin");
+    const submit = () => unlockPrivateGate(inp ? inp.value : "", pin ? pin.value : "");
+    [inp, pin].forEach((el) => {
+      if (el) el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+    });
   }
   let diskSyncTimer = null;
   let lastDiskSyncAt = 0;
@@ -265,6 +280,8 @@
           }
         } catch (e) {}
         // 2. Pull live two-way ntfy.sh channel messages (Tablet <-> Laptop)
+        let ntfyCount = 0;
+        let ntfyMaxXp = -1;
         try {
           const nr = await fetch(`https://ntfy.sh/${CLOUD_TOPIC}/json?poll=1&since=1700000000`, { cache: "no-store" });
           if (nr.ok) {
@@ -274,13 +291,16 @@
               try {
                 const ev = JSON.parse(ln);
                 if (ev.event !== "message") continue;
+                ntfyCount += 1;
                 if (ev.message && ev.message.startsWith("{")) {
                   const nSave = JSON.parse(ev.message);
+                  if (typeof nSave.xp === "number" && nSave.xp > ntfyMaxXp) ntfyMaxXp = nSave.xp;
                   if (mergeExternalSave(nSave)) anyMerged = true;
                 } else if (ev.attachment && ev.attachment.url) {
                   const ar = await fetch(ev.attachment.url, { cache: "no-store" });
                   if (ar.ok) {
                     const aSave = await ar.json();
+                    if (typeof aSave.xp === "number" && aSave.xp > ntfyMaxXp) ntfyMaxXp = aSave.xp;
                     if (mergeExternalSave(aSave)) anyMerged = true;
                   }
                 }
@@ -288,6 +308,11 @@
             }
           }
         } catch (e) {}
+        // Auto-rebroadcast if 12h ntfy.sh cache expired or this device has richer progress
+        CLOUD_SYNC.hydrated = true;
+        if ((ntfyCount === 0 || (SAVE().xp || 0) > ntfyMaxXp) && (SAVE().xp || 0) > 0) {
+          pushToCloudNow(false);
+        }
       }
       CLOUD_SYNC.hydrated = true;
       CLOUD_SYNC.syncing = false;
@@ -426,6 +451,12 @@
       if (typeof ec.totalStepsRight === "number" && ec.totalStepsRight > (c.totalStepsRight || 0)) { c.totalStepsRight = ec.totalStepsRight; changed = true; }
       if (typeof ec.frenzyCharges === "number" && ec.frenzyCharges > (c.frenzyCharges || 0)) { c.frenzyCharges = ec.frenzyCharges; changed = true; }
       if (typeof ec.lootBoxesOpened === "number" && ec.lootBoxesOpened > (c.lootBoxesOpened || 0)) { c.lootBoxesOpened = ec.lootBoxesOpened; changed = true; }
+      if (ec.bonds && typeof ec.bonds === "object") {
+        c.bonds = c.bonds || {};
+        Object.keys(ec.bonds).forEach((k) => {
+          if (typeof ec.bonds[k] === "number" && ec.bonds[k] > (c.bonds[k] || 0)) { c.bonds[k] = ec.bonds[k]; changed = true; }
+        });
+      }
       if (ec.sealsClaimed && typeof ec.sealsClaimed === "object") {
         c.sealsClaimed = c.sealsClaimed || {};
         Object.keys(ec.sealsClaimed).forEach((k) => { if (!c.sealsClaimed[k] && ec.sealsClaimed[k]) { c.sealsClaimed[k] = ec.sealsClaimed[k]; changed = true; } });
@@ -6460,15 +6491,21 @@
     c.daily.sessions += 1;
     c.daily.capsules = (c.daily.capsules || 0) + 1;
     if (n && passedNode) c.daily.nodes = (c.daily.nodes || 0) + 1;
+    if (passedSession) {
+      c.heatStreak = Math.min(10, (c.heatStreak || 0) + 1);
+    } else {
+      c.heatStreak = 0;
+    }
+    const heatMult = c.heatStreak >= 5 ? 3 : c.heatStreak >= 3 ? 2 : c.heatStreak >= 2 ? 1.5 : 1;
     markActiveDay();
-    const totalXp = S.xp + bonus;
+    const totalXp = Math.round((S.xp + bonus) * heatMult);
     gainXP(totalXp);
     const lootDrop = passedSession ? rollLootBox() : null;
     persist();
     SES = null;
     document.body.classList.remove("ody-in-session");
     SFX.win();
-    renderResult({ node: n, stars, acc, xp: totalXp, mins, combo: S.bestCombo, exam, placement, spoke: S.spoke, mode: S.mode, graded: S.graded, microCap: mCap, microProgress: microProgressAfter, lootDrop });
+    renderResult({ node: n, stars, acc, xp: totalXp, mins, combo: S.bestCombo, exam, placement, spoke: S.spoke, mode: S.mode, graded: S.graded, microCap: mCap, microProgress: microProgressAfter, lootDrop, passedSession, heatMult, heatStreak: c.heatStreak });
   }
   function scoreExam(S, level) {
     const E = EXAMS()[level] || {}; const secs = ["listening", "dictation", "grammar", "reading", "writing", "speaking"];
@@ -6500,7 +6537,8 @@
     const st = "⭐".repeat(r.stars) + `<span class="dim">${"☆".repeat(3 - r.stars)}</span>`;
     const isMicro = !!(r.microCap && r.node);
     const mp = r.microProgress || (r.node ? nodeMicroProgress(r.node) : null);
-    let head = `<h2>${r.mode === "quick60" ? "⚡ Capsule Express 60s accomplie !" : isMicro && mp && !mp.allDone ? `⚡ ${esc(r.microCap.title)} verrouillée ! (${mp.doneCount}/${mp.total})` : r.mode === "review" ? "Review complete!" : r.node && r.node.kind === "boss" ? "Boss defeated!" : "Session complete!"}</h2><div class="ody-stars">${st}</div>`;
+    const stampHtml = r.passedSession ? `<div class="ody-mission-stamp"><span>🏆 MISSION ACCOMPLIE</span>${r.heatMult > 1 ? `<span class="stamp-heat">🔥 HEAT ×${r.heatMult}</span>` : ""}</div>` : "";
+    let head = `${stampHtml}<h2>${r.mode === "quick60" ? "⚡ Capsule Express 60s accomplie !" : isMicro && mp && !mp.allDone ? `⚡ ${esc(r.microCap.title)} verrouillée ! (${mp.doneCount}/${mp.total})` : r.mode === "review" ? "Review complete!" : r.node && r.node.kind === "boss" ? "Boss defeated!" : "Session complete!"}</h2><div class="ody-stars">${st}</div>`;
     let body = "";
     if (isMicro && mp) {
       const pills = mp.caps.map((cp) => {
@@ -6772,7 +6810,7 @@
       const meta = KIND_META[n.kind] || { icon: "•", label: "" };
       return `<button class="p90-qitem ${done ? "done" : hasPart ? "partial" : ""}" data-a2="go" data-id="${esc(n.id)}">
         <span class="ic">${meta.icon}</span>
-        <span class="txt"><b>#${idx + 1} · ${esc(n.title)}</b><small>${esc(levelOfNode(n))} · ${esc(meta.label)}${hasPart ? ` · Sauvegardé à l'étape ${part.i + 1}/${part.steps.length}` : ""}</small></span>
+        <span class="txt"><b>#${idx + 1} · ${esc(n.title)}</b><small>${esc(levelOfNode(n))} · ${esc(meta.label)}${hasPart ? ` · Sauvegardé à l'étape ${part.i + 1}/${partStepLen(part)}` : ""}</small></span>
         <span class="tag">${done ? "⭐".repeat(done) : hasPart ? "▶ Reprendre" : "▶ Jouer"}</span>
       </button>`;
     }).join("");
@@ -6814,7 +6852,7 @@
       const hasPart = hasPartialProgress(part);
       return `<button type="button" class="pm-pin ${done ? "done" : ""} ${hasPart ? "partial" : ""}" style="left:${sp.xp}%;top:${sp.yp}%" data-a2="landmark" data-id="${sp.id}" title="${esc(sp.name)} — ${esc(sp.sub)}">
         <span class="pm-ico">${sp.ic}</span>
-        <span class="pm-txt"><b>${esc(sp.name)}</b><small>${hasPart ? `Étape ${part.i + 1}/${part.steps.length}` : done ? "★ Accompli" : esc(sp.sub)}</small></span>
+        <span class="pm-txt"><b>${esc(sp.name)}</b><small>${hasPart ? `Étape ${part.i + 1}/${partStepLen(part)}` : done ? "★ Accompli" : esc(sp.sub)}</small></span>
       </button>`;
     }).join("");
     return `<section class="ody-paris-map" aria-label="Carte Vivante de Paris">
@@ -6895,9 +6933,80 @@
     </div>`;
   }
 
+  function isEnGuide() {
+    const c = CH();
+    if (c.uiLang === "en") return true;
+    if (c.uiLang === "fr") return false;
+    return cefrRank(currentLevel()) <= 1;
+  }
+
+  function bondLevelInfo(pts) {
+    const p = pts || 0;
+    if (p >= 180) return { lv: 5, label: "Âme Parisienne", next: 180, pct: 100 };
+    if (p >= 100) return { lv: 4, label: "Confident", next: 180, pct: Math.round(((p - 100) / 80) * 100) };
+    if (p >= 50) return { lv: 3, label: "Complice", next: 100, pct: Math.round(((p - 50) / 50) * 100) };
+    if (p >= 20) return { lv: 2, label: "Habitué", next: 50, pct: Math.round(((p - 20) / 30) * 100) };
+    return { lv: 1, label: "Nouveau", next: 20, pct: Math.round((p / 20) * 100) };
+  }
+
+  function addBond(fid, pts) {
+    if (!fid) return;
+    const c = CH();
+    c.bonds = c.bonds || {};
+    const prevLv = bondLevelInfo(c.bonds[fid] || 0).lv;
+    c.bonds[fid] = (c.bonds[fid] || 0) + (pts || 10);
+    const nextInfo = bondLevelInfo(c.bonds[fid]);
+    if (nextInfo.lv > prevLv) {
+      const f = AMIS_DE_PARIS.find((x) => x.id === fid);
+      toast(`❤️ Lien renforcé · ${f ? f.name : fid} (Lv.${nextInfo.lv})`, `Nouveau rang d'amitié : ${nextInfo.label} !`, "❤️");
+    }
+  }
+
+  const PARIS_DISPATCHES = [
+    { id: "d_cafe", fid: "camille", place: "Café de Flore · Saint-Germain", icon: "☕", quoteFr: "« Viens ! Le serveur arrive, tu commandes quoi ? »", subEn: "Camille waves you over at Café de Flore — jump into a 90s live micro-scene.", subFr: "Camille vous fait signe en terrasse — plongez dans une micro-scène de 90s.", act: "microcap", ctaEn: "Step Into Scene (90s)", ctaFr: "Entrer en Scène (90s)" },
+    { id: "d_canal", fid: "yanis", place: "Canal Saint-Martin · 10e", icon: "🌉", quoteFr: "« T'es où mec ? Décode le vrai français de rue avant qu'on parte ! »", subEn: "Yanis challenges you to decode real Parisian street French & direct thought.", subFr: "Yanis vous défie de décoder le vrai français parlé sans traduire.", act: "amerun", ctaEn: "Meet Yanis (90s)", ctaFr: "Rejoindre Yanis (90s)" },
+    { id: "d_metro", fid: "camille", place: "Métro Ligne 1 · Châtelet", icon: "🚇", quoteFr: "« Les portes vont se fermer ! Un sprint de 60s sur les 4 piliers ! »", subEn: "High-speed 60s Parisian sprint across Read, Listen, Write & Speak.", subFr: "Sprint éclair de 60s à travers Lire, Écouter, Écrire et Parler.", act: "quick60", ctaEn: "Catch the Train (60s)", ctaFr: "Attraper la Rame (60s)" },
+    { id: "d_marais", fid: "celeste", place: "Galerie du Marais · 3e", icon: "🎨", quoteFr: "« Un collectionneur vient de te parler — réponds à voix haute ! »", subEn: "Step into Céleste's gallery and speak aloud with native Parisian cadence.", subFr: "Entrez dans la galerie de Céleste et prenez la parole avec élégance.", act: "pillarrep", p: "speak", ctaEn: "Speak Aloud (90s)", ctaFr: "Prendre la Parole (90s)" },
+    { id: "d_oberkampf", fid: "yanis", place: "Rue Oberkampf · 11e", icon: "🎧", quoteFr: "« Écoute bien ce qu'il vient de lâcher à vitesse réelle ! »", subEn: "Catch fast street French, elisions & liaisons in 90 seconds.", subFr: "Captez le français parlé rapide, les élisions et les liaisons en 90s.", act: "pillarrep", p: "listen", ctaEn: "Intercept Audio (90s)", ctaFr: "Capter l'Audio (90s)" },
+    { id: "d_vosges", fid: "celeste", place: "Place des Vosges · 4e", icon: "✍️", quoteFr: "« Écris cette réplique de mémoire pure — sans filet ! »", subEn: "Blank-slate memory recall challenge under the arcades of Place des Vosges.", subFr: "Défi de mémoire page blanche sous les arcades de la Place des Vosges.", act: "pillarrep", p: "write", ctaEn: "Take the Challenge (90s)", ctaFr: "Relever le Défi (90s)" },
+    { id: "d_sorbonne", fid: "valcourt", place: "Sous la Coupole · 6e", icon: "🏛️", quoteFr: "« Décryptez le sous-entendu caché dans cette dépêche parisienne. »", subEn: "Read between the lines like an educated Parisian with Prof. Valcourt.", subFr: "Lisez entre les lignes et décodez les nuances avec le Prof. Valcourt.", act: "pillarrep", p: "read", ctaEn: "Decode Dispatch (90s)", ctaFr: "Décrypter (90s)" },
+    { id: "d_terrasse", fid: "camille", place: "Terrasse du 6e · Rive Gauche", icon: "🥂", quoteFr: "« Raconte-moi ta journée en français — même une seule phrase ! »", subEn: "Drop by the terrace and chat live with your 4 Parisian friends.", subFr: "Passez en terrasse discuter librement avec vos 4 amis parisiens.", act: "amis", ctaEn: "Join the Table", ctaFr: "Rejoindre la Table" }
+  ];
+  let DISPATCH_IDX = 0;
+
+  function parisDispatchHtml(activeNode, mpActive) {
+    const c = CH();
+    const en = isEnGuide();
+    const d = PARIS_DISPATCHES[DISPATCH_IDX % PARIS_DISPATCHES.length];
+    const friend = AMIS_DE_PARIS.find((x) => x.id === d.fid) || AMIS_DE_PARIS[0];
+    const bond = bondLevelInfo((c.bonds && c.bonds[d.fid]) || 0);
+    const heat = c.heatStreak >= 5 ? 3 : c.heatStreak >= 3 ? 2 : c.heatStreak >= 2 ? 1.5 : 1;
+    const capIdx = (mpActive && mpActive.nextCapIdx != null) ? mpActive.nextCapIdx : 0;
+    return `<section class="ody-dispatch-card" id="ody-paris-dispatch" aria-label="Live Paris Street Dispatch">
+      <div class="disp-top">
+        <span class="disp-live-pill">📞 ${en ? "LIVE IN PARIS · STREET ENCOUNTER" : "EN DIRECT DE PARIS · RENCONTRE DE RUE"}</span>
+        <span class="disp-place">${d.icon} ${esc(d.place)}</span>
+        <span class="disp-bond-pill" title="Character Bond Level">❤️ ${esc(friend.name)} · Lv.${bond.lv} ${esc(bond.label)}</span>
+        ${heat > 1 ? `<span class="disp-heat-pill">🔥 HEAT ×${heat}</span>` : ""}
+      </div>
+      <div class="disp-body">
+        <img src="${friend.img}" class="disp-av" alt="${esc(friend.name)}" onerror="this.style.display='none'">
+        <div class="disp-txt">
+          <div class="disp-quote" data-a="say" data-t="${esc(d.quoteFr.replace(/[«»]/g, ""))}">${esc(d.quoteFr)} 🔊</div>
+          <div class="disp-sub">${esc(en ? d.subEn : d.subFr)}</div>
+        </div>
+        <div class="disp-actions">
+          <button type="button" class="ody-btn primary small" id="ody-dispatch-go" data-a2="launchdispatch" data-idx="${DISPATCH_IDX % PARIS_DISPATCHES.length}" data-nid="${esc(activeNode.id)}" data-cap="${capIdx}">▶ ${esc(en ? d.ctaEn : d.ctaFr)}</button>
+          <button type="button" class="ody-btn ghost tiny" id="ody-dispatch-reroll" data-a2="rerolldispatch">🎲 ${en ? "Next Call" : "Autre Appel"}</button>
+        </div>
+      </div>
+    </section>`;
+  }
+
   function quatuorAndPathBarHtml() {
     const c = CH();
     const sk = c.skills || {};
+    const en = isEnGuide();
     const isRoyal = c.pathMode !== "integral";
     const royalTotal = NODES.filter((n) => n.royal).length;
     const integralTotal = NODES.length;
@@ -6909,45 +7018,45 @@
     return `<section class="ody-quatuor-deck" aria-label="Les 4 Piliers Natifs & Sélecteur de Parcours">
       <div class="ody-voie-bar">
         <div class="voie-left">
-          <img src="assets/pixel_voie_royale.png?v=22.0" class="voie-crest" alt="👑">
+          <img src="assets/pixel_voie_royale.png?v=25.0" class="voie-crest" alt="👑">
           <div class="voie-txt">
-            <span class="voie-kicker">🧭 RYTHME D'AVANCEMENT · ZÉRO ENLISEMENT ENTRE LES NIVEAUX</span>
-            <b>${isRoyal ? `👑 Voie Royale Active (${royalTotal} étapes clés A1→C2 · ~12 par niveau)` : `📚 Parcours Intégral Actif (${integralTotal} étapes complètes · 62 Mondes)`}</b>
-            <small>Passez librement du parcours accéléré (sans jamais stagner) au parcours complet, ou débloquez n'importe quel niveau en 1 clic.</small>
+            <span class="voie-kicker">${en ? "🧭 LEARNING PACE · NEVER GET STUCK BETWEEN LEVELS" : "🧭 RYTHME D'AVANCEMENT · ZÉRO ENLISEMENT ENTRE LES NIVEAUX"}</span>
+            <b>${isRoyal ? (en ? `👑 Royal Fast-Track Active (${royalTotal} core milestones A1→C2 · ~12/level)` : `👑 Voie Royale Active (${royalTotal} étapes clés A1→C2 · ~12 par niveau)`) : (en ? `📚 Complete Archive Active (${integralTotal} full stages · 62 Worlds)` : `📚 Parcours Intégral Actif (${integralTotal} étapes complètes · 62 Mondes)`)}</b>
+            <small>${en ? "Switch freely between the fast-track milestones and the full 62-world course, or unlock any CEFR level in 1 click." : "Passez librement du parcours accéléré (sans jamais stagner) au parcours complet, ou débloquez n'importe quel niveau en 1 clic."}</small>
           </div>
         </div>
         <div class="voie-toggle-btns">
-          <button type="button" class="ody-btn small ${isRoyal ? "primary" : "ghost"}" data-a2="pathmode" data-m="royal">👑 Voie Royale (~12/niv.)</button>
-          <button type="button" class="ody-btn small ${!isRoyal ? "primary" : "ghost"}" data-a2="pathmode" data-m="integral">📚 Intégral (${integralTotal})</button>
+          <button type="button" class="ody-btn small ${isRoyal ? "primary" : "ghost"}" data-a2="pathmode" data-m="royal">👑 ${en ? "Royal Track (~12/lvl)" : "Voie Royale (~12/niv.)"}</button>
+          <button type="button" class="ody-btn small ${!isRoyal ? "primary" : "ghost"}" data-a2="pathmode" data-m="integral">📚 ${en ? `Full (${integralTotal})` : `Intégral (${integralTotal})`}</button>
         </div>
       </div>
       <div class="quatuor-head">
-        <img src="assets/pixel_quatuor.png?v=22.0" class="quatuor-crest" alt="4 Piliers">
+        <img src="assets/pixel_quatuor.png?v=25.0" class="quatuor-crest" alt="4 Piliers">
         <div>
-          <span class="quatuor-kicker">🎯 LES 4 PILIERS DU FRANÇAIS NATIF · ENTRAÎNEMENT ACTIF (${lv})</span>
-          <h4>Lire · Écouter · Écrire · Parler comme un vrai Français (Reps de 90s sans QCM passif)</h4>
+          <span class="quatuor-kicker">${en ? `🎯 THE 4 NATIVE FRENCH PILLARS · ACTIVE TRAINING (${lv})` : `🎯 LES 4 PILIERS DU FRANÇAIS NATIF · ENTRAÎNEMENT ACTIF (${lv})`}</span>
+          <h4>${en ? "Read · Listen · Write · Speak like a real native (90s active reps — no passive MCQ)" : "Lire · Écouter · Écrire · Parler comme un vrai Français (Reps de 90s sans QCM passif)"}</h4>
         </div>
       </div>
       <div class="quatuor-grid">
         <button type="button" class="quatuor-card q-read" data-a2="pillarrep" data-p="read">
-          <span class="qc-top"><span class="qc-ic">📖</span><b>1. LIRE</b><span class="qc-pct">${pctFor("reading")}%</span></span>
-          <small>Textes authentiques, sous-entendus, litotes &amp; pensée directe</small>
-          <span class="qc-go">▶ Rep Lecture (90s)</span>
+          <span class="qc-top"><span class="qc-ic">📖</span><b>${en ? "1. READ · LIRE" : "1. LIRE"}</b><span class="qc-pct">${pctFor("reading")}%</span></span>
+          <small>${en ? "Real French texts, cultural nuances & direct thinking without translating" : "Textes authentiques, sous-entendus, litotes &amp; pensée directe"}</small>
+          <span class="qc-go">▶ ${en ? "Reading Rep (90s)" : "Rep Lecture (90s)"}</span>
         </button>
         <button type="button" class="quatuor-card q-listen" data-a2="pillarrep" data-p="listen">
-          <span class="qc-top"><span class="qc-ic">👂</span><b>2. ÉCOUTER</b><span class="qc-pct">${pctFor("listening")}%</span></span>
-          <small>Élisions de rue (« chais pas »), liaisons, Radio &amp; Dictée pure</small>
-          <span class="qc-go">▶ Rep Écoute (90s)</span>
+          <span class="qc-top"><span class="qc-ic">👂</span><b>${en ? "2. LISTEN · ÉCOUTER" : "2. ÉCOUTER"}</b><span class="qc-pct">${pctFor("listening")}%</span></span>
+          <small>${en ? "Fast spoken French (« chais pas »), liaisons, radio & pure dictation" : "Élisions de rue (« chais pas »), liaisons, Radio &amp; Dictée pure"}</small>
+          <span class="qc-go">▶ ${en ? "Listening Rep (90s)" : "Rep Écoute (90s)"}</span>
         </button>
         <button type="button" class="quatuor-card q-write" data-a2="pillarrep" data-p="write">
-          <span class="qc-top"><span class="qc-ic">✍️</span><b>3. ÉCRIRE</b><span class="qc-pct">${pctFor("writing")}%</span></span>
-          <small>Mémoire page blanche (zéro indice), verbes &amp; périodes C2</small>
-          <span class="qc-go">▶ Rep Écriture (90s)</span>
+          <span class="qc-top"><span class="qc-ic">✍️</span><b>${en ? "3. WRITE · ÉCRIRE" : "3. ÉCRIRE"}</b><span class="qc-pct">${pctFor("writing")}%</span></span>
+          <small>${en ? "Blank-slate memory recall (no hints), verb forge & C2 sentences" : "Mémoire page blanche (zéro indice), verbes &amp; périodes C2"}</small>
+          <span class="qc-go">▶ ${en ? "Writing Rep (90s)" : "Rep Écriture (90s)"}</span>
         </button>
         <button type="button" class="quatuor-card q-speak" data-a2="pillarrep" data-p="speak">
-          <span class="qc-top"><span class="qc-ic">🎙️</span><b>4. PARLER</b><span class="qc-pct">${pctFor("speaking")}%</span></span>
-          <small>Shadowing rythmique, voix au micro, codes sociaux &amp; improv</small>
-          <span class="qc-go">▶ Rep Parole (90s)</span>
+          <span class="qc-top"><span class="qc-ic">🎙️</span><b>${en ? "4. SPEAK · PARLER" : "4. PARLER"}</b><span class="qc-pct">${pctFor("speaking")}%</span></span>
+          <small>${en ? "Rhythm shadowing, live microphone scoring, social codes & improv" : "Shadowing rythmique, voix au micro, codes sociaux &amp; improv"}</small>
+          <span class="qc-go">▶ ${en ? "Speaking Rep (90s)" : "Rep Parole (90s)"}</span>
         </button>
       </div>
     </section>`;
@@ -7020,6 +7129,7 @@
             ${isStandaloneActive ? `<button class="ody-btn ghost small" data-a2="resumemode" data-k="${esc(activeKey)}">▶ Resume ${esc(standalonePart.title || standalonePart.mode)} (${standalonePart.i + 1}/${stndLen})</button>` : ""}
           </div>
         </section>
+        ${parisDispatchHtml(activeNode, mpActive)}
         ${quatuorAndPathBarHtml()}
         ${parisMapStripHtml()}
         <div class="ody-neuro-bar">
@@ -7086,12 +7196,12 @@
       <div class="ody-kind">${meta.icon || ""} ${esc(meta.label || "")} · ${esc(levelOfNode(n))}${n.unitObj && n.unitObj.num ? ` · World ${n.unitObj.num}` : ""}</div>
       <h3>${esc(n.title)}</h3>
       ${st ? `<div class="ody-stars small">${"⭐".repeat(st)}</div>` : ""}
-      ${hasPart ? `<div class="ody-goal small">⏳ Saved at Step ${part.i + 1} of ${part.steps.length} (${Math.max(8, Math.round(((part.i + 1) / part.steps.length) * 100))}%)</div>` : ""}
+      ${hasPart ? `<div class="ody-goal small">⏳ Saved at Step ${part.i + 1} of ${partStepLen(part)} (${Math.max(8, Math.round(((part.i + 1) / partStepLen(part)) * 100))}%)</div>` : ""}
       ${g ? `<div class="ody-goal small">Best score: ${g.best || g.score || 0}% ${g.passed ? "✔" : ""}</div>` : ""}
       ${microListHtml}
       ${open ? "" : `<p class="ody-goal small">🔒 Cette étape est en aval de votre position actuelle — mais vous pouvez la débloquer en 1 clic ci-dessous si vous souhaitez y accéder immédiatement.</p>`}
       <div class="ody-row center">
-        ${open ? (hasPart ? `<button class="ody-btn primary" data-a2="go" data-id="${esc(n.id)}">▶ Resume (Step ${part.i + 1}/${part.steps.length})</button><button class="ody-btn ghost" data-a2="restart" data-id="${esc(n.id)}">🔄 Restart from Step 1</button>` : `<button class="ody-btn primary" data-a2="go" data-id="${esc(n.id)}">${st ? "🔁 Replay Full" : "▶ Start Full"}</button>${mp && mp.total > 1 ? `<button class="ody-btn small micro-hero-btn" data-a2="microcap" data-id="${esc(n.id)}" data-cap="${mp.nextCapIdx}">⚡ Capsule ${mp.nextCapIdx + 1}/${mp.total} (90s)</button>` : ""}`) : `<button class="ody-btn primary" data-a2="unlocknode" data-id="${esc(n.id)}">🔓 Débloquer &amp; Jouer maintenant</button>`}
+        ${open ? (hasPart ? `<button class="ody-btn primary" data-a2="go" data-id="${esc(n.id)}">▶ Resume (Step ${part.i + 1}/${partStepLen(part)})</button><button class="ody-btn ghost" data-a2="restart" data-id="${esc(n.id)}">🔄 Restart from Step 1</button>` : `<button class="ody-btn primary" data-a2="go" data-id="${esc(n.id)}">${st ? "🔁 Replay Full" : "▶ Start Full"}</button>${mp && mp.total > 1 ? `<button class="ody-btn small micro-hero-btn" data-a2="microcap" data-id="${esc(n.id)}" data-cap="${mp.nextCapIdx}">⚡ Capsule ${mp.nextCapIdx + 1}/${mp.total} (90s)</button>` : ""}`) : `<button class="ody-btn primary" data-a2="unlocknode" data-id="${esc(n.id)}">🔓 Débloquer &amp; Jouer maintenant</button>`}
         <button class="ody-btn ghost" data-a2="closesheet">Close</button>
       </div></div>`;
     document.body.appendChild(d);
@@ -7111,7 +7221,7 @@
       const sub = isDist ? `${d.arrondissement || ""} · Registre : ${d.targetRegister || "Courant"} · ${d.npc ? d.npc.name : ""}` : `${d.location || "Paris"} · ${d.category || n.cefr}`;
       return `<button type="button" class="p90-qitem ${st ? "done" : hasPart ? "partial" : ""}" data-a2="go" data-id="${esc(n.id)}">
         <span class="ic">${d.icon || (isDist ? "🏙️" : "✒️")}</span>
-        <span class="txt"><b>${esc(n.title)}</b><small>${esc(n.cefr)} · ${esc(sub)}${hasPart ? ` · Étape ${part.i + 1}/${part.steps.length}` : ""}</small></span>
+        <span class="txt"><b>${esc(n.title)}</b><small>${esc(n.cefr)} · ${esc(sub)}${hasPart ? ` · Étape ${part.i + 1}/${partStepLen(part)}` : ""}</small></span>
         <span class="tag">${st ? "⭐".repeat(st) : hasPart ? "▶ Reprendre" : "▶ Explorer"}</span>
       </button>`;
     }).join("");
@@ -7313,10 +7423,13 @@
       }];
     }
     const hist = AMIS_STATE.history[frObj.id];
-    const tabsHtml = AMIS_DE_PARIS.map((f) => `<button type="button" class="amis-tab ${f.id === frObj.id ? "active" : ""}" data-a2="amis" data-fid="${f.id}">
-      <span class="am-av">${f.avatar}</span>
-      <span class="am-meta"><b>${esc(f.name)}</b><small>${esc(f.role)}</small></span>
-    </button>`).join("");
+    const tabsHtml = AMIS_DE_PARIS.map((f) => {
+      const b = bondLevelInfo((CH().bonds && CH().bonds[f.id]) || 0);
+      return `<button type="button" class="amis-tab ${f.id === frObj.id ? "active" : ""}" data-a2="amis" data-fid="${f.id}">
+        <span class="am-av">${f.avatar}</span>
+        <span class="am-meta"><b>${esc(f.name)} <span class="bond-pill">❤️ Lv.${b.lv}</span></b><small>${esc(f.role)}</small></span>
+      </button>`;
+    }).join("");
     const msgsHtml = hist.map((m) => {
       if (m.role === "user") {
         return `<div class="amis-msg user"><div class="amis-bub user-bub"><b>Vous :</b> « ${esc(m.fr)} »</div></div>`;
@@ -7455,6 +7568,7 @@
     AMIS_STATE.busy = false;
     const c = CH();
     c.reputation = (c.reputation || 0) + 5;
+    addBond(frObj.id, 15);
     gainXP(15);
     SFX.ok();
     persist();
@@ -7749,7 +7863,31 @@
     ob(el) { onboardingAction(el.dataset.v); },
     privunlock() {
       const inp = document.getElementById("ody-priv-in");
-      unlockPrivateGate(inp ? inp.value : "");
+      const pin = document.getElementById("ody-priv-pin");
+      unlockPrivateGate(inp ? inp.value : "", pin ? pin.value : "");
+    },
+    toggleuilang() {
+      const c = CH();
+      c.uiLang = isEnGuide() ? "fr" : "en";
+      persist();
+      SFX.tap();
+      updateBar();
+      if (!SES && document.body.dataset.scene === "home") renderHome();
+      toast(c.uiLang === "en" ? "🇬🇧 Beginner Guide (EN+FR) Active" : "🇫🇷 Mode Immersion 100% Français", c.uiLang === "en" ? "Clear English guidance paired with French keywords." : "Toute l'interface passe en immersion française.", c.uiLang === "en" ? "🇬🇧" : "🇫🇷");
+    },
+    rerolldispatch() {
+      DISPATCH_IDX = (DISPATCH_IDX + 1) % PARIS_DISPATCHES.length;
+      SFX.tap();
+      if (!SES && document.body.dataset.scene === "home") renderHome();
+    },
+    launchdispatch(el) {
+      const d = PARIS_DISPATCHES[+(el.dataset.idx || 0)] || PARIS_DISPATCHES[0];
+      if (d && d.fid) addBond(d.fid, 10);
+      DISPATCH_IDX = (DISPATCH_IDX + 1) % PARIS_DISPATCHES.length;
+      persist();
+      if (d.act === "microcap") return startMicroCapsule(el.dataset.nid, +(el.dataset.cap || 0));
+      if (d.act === "pillarrep") return HOME_ACT.pillarrep({ dataset: { p: d.p || "speak" } });
+      if (HOME_ACT[d.act]) return HOME_ACT[d.act](el);
     },
     cloudsync() { openCloudSyncSheet(); },
     syncnow() {
@@ -7871,7 +8009,7 @@
     const rv = reviewCards().length;
     const lvl = currentLevel();
     bar.innerHTML = `
-      <button class="ob-home" data-a2="home" title="Your path"><img src="assets/odyssee_icon.png?v=23.0" class="ob-pixel-icon" alt=""> <span>L'Odyssée</span></button>
+      <button class="ob-home" data-a2="home" title="Your path"><img src="assets/odyssee_icon.png?v=25.0" class="ob-pixel-icon" alt=""> <span>L'Odyssée</span></button>
       <span class="ob-lvl" title="Current level">${lvl === "NATIF" ? "👑" : lvl}</span>
       <button class="ob-stat btn ob-nav-pill ob-quick-pill" data-a2="quick60" title="Capsule Express 60s · 4 micro-actions & Coffre de Dopamine">⚡ Express 60s</button>
       <button class="ob-stat btn ob-nav-pill" data-a2="amerun" title="L'Âme Française & Pensée Directe (A1→C2) · 36 réflexes natifs sans traduire">🇫🇷 Âme &amp; Pensée</button>
@@ -7883,6 +8021,7 @@
       <button class="ob-stat btn ob-nav-pill" data-a2="pantheon" title="Panthéon des Immortels & 12 Sceaux de Paris"><img src="assets/pixel_pantheon.png" class="ob-mini-px" alt=""> Panthéon</button>
       <button class="ob-stat btn ob-nav-pill" data-a2="atlas" title="Atlas de Maîtrise C2">🗺️ Atlas</button>
       <button class="ob-stat btn ob-nav-pill ${CLOUD_SYNC.status === "synced" ? "ok" : ""}" id="ob-cloud-pill" data-a2="cloudsync" title="Synchronisation Bidirectionnelle Tablette Redmi Pad 2 Pro 5G ↔ PC">☁️ Sync ✓</button>
+      <button class="ob-stat btn ob-nav-pill" id="ob-lang-pill" data-a2="toggleuilang" title="Switch between Beginner English+French Guide and 100% French Immersion">${isEnGuide() ? "🇬🇧 EN+FR" : "🇫🇷 FR"}</button>
       <div class="ob-sp"></div>
       <span class="ob-stat" title="Day streak">🔥 ${s.streak || 0}</span>
       <span class="ob-stat ${daily.xp >= c.goal ? "ok" : ""}" title="Today's XP / daily goal">⚡ ${daily.xp}/${c.goal}</span>
@@ -7899,7 +8038,7 @@
     const d = document.createElement("div"); d.id = "ody-drawer"; d.className = "ody-drawer-wrap";
     const tile = (sc, ic, t, sub) => `<button class="ody-tile-m" data-a2="scene" data-s="${sc}"><span class="ic">${ic}</span><b>${t}</b><small>${sub}</small></button>`;
     d.innerHTML = `<div class="ody-drawer">
-      <div class="ody-row between"><h3><img src="assets/odyssee_icon.png?v=23.0" class="ob-pixel-icon" alt=""> Menu · L'Odyssée v23.0</h3><button class="ody-btn ghost small" data-a2="closedrawer">✕</button></div>
+      <div class="ody-row between"><h3><img src="assets/odyssee_icon.png?v=25.0" class="ob-pixel-icon" alt=""> Menu · L'Odyssée v25.0</h3><button class="ody-btn ghost small" data-a2="closedrawer">✕</button></div>
       <button class="ody-tile-m wide" data-a2="home"><span class="ic">🧭</span><b>Carte &amp; Odyssée</b><small>62 Mondes, Synergie A1→C2, Micro-Capsules 90s, Quartiers, Ateliers &amp; Examens</small></button>
       <button class="ody-tile-m wide" data-a2="cloudsync"><span class="ic">☁️</span><b>Tablette Redmi Pad 2 Pro 5G &amp; Sync Cloud</b><small>Synchronisation automatique Tablette ↔ PC &amp; Clavier Français Logitech</small></button>
       <button class="ody-tile-m wide" data-a2="atlas"><span class="ic">🗺️</span><b>Atlas de Maîtrise C2</b><small>Les 6 Époques (A1 → C2 → Natif) &amp; 7 Compétences sans limite de temps</small></button>
