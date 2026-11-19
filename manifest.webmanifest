@@ -2,7 +2,7 @@
   "name": "L'Odyssée Française — Du Zéro au Français Natif C2",
   "short_name": "L'Odyssée",
   "description": "Édition Privée : 62 Mondes, Voie Royale, Quatuor des 4 Piliers, Micro-Capsules 90s & Sync Cloud Tablette ↔ PC.",
-  "start_url": "./index.html?v=26.0",
+  "start_url": "./index.html?v=27.0",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",

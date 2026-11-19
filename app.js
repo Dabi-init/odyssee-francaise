@@ -3526,7 +3526,8 @@
       <!-- Top Bar: World Selector & Scope Toggle -->
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;margin-bottom:0.75rem;">
         <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
-          <button class="btn" onclick="window.navigateScene('academy')">🎮 Back to Stage ${escapeHtml(save.currentStageId || '1-1')}</button>
+          <button class="btn" onclick="window.ODY_BACK ? window.ODY_BACK() : window.navigateScene('home')">⬅️ Retour</button>
+          <button class="btn" onclick="window.navigateScene('academy')">🎮 Stage ${escapeHtml(save.currentStageId || '1-1')}</button>
           <select class="btn" style="color:#fde047;font-weight:800;" onchange="window.changeBattleChapter(Number(this.value))">
             ${DATA.lessons.map(l => `
               <option value="${l.number}" ${l.number === lesson.number ? 'selected' : ''}>

@@ -335,14 +335,22 @@
     const q = B.quiz && B.quiz[B.q];
     return { stepIdx: B.idx, phase: B.phase, quizAnswerIdx: q ? q.opts.findIndex(o => o.ok) : -1, done: Object.keys(b.done || {}), completed: !!b.completed };
   };
+  window.RPG_SOUNDLAB_BACK = function () {
+    if (V.view === "sound" && typeof window.slHub === "function") {
+      window.slHub();
+      return true;
+    }
+    return false;
+  };
   window.addEventListener("keydown", (e) => {
     const tag = (e.target && e.target.tagName) || "";
     if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return;
+    const dKey = /^[1-6]$/.test(e.key) ? +e.key : (/^(?:Digit|Numpad)([1-6])$/.test(e.code || "") ? +RegExp.$1 : 0);
     if (document.getElementById("sl-opt-a") && V.duel && !V.duel.answered) {
-      if (e.key === "a" || e.key === "A" || e.key === "1") { e.preventDefault(); window.slAnswer("a"); }
-      else if (e.key === "b" || e.key === "B" || e.key === "2") { e.preventDefault(); window.slAnswer("b"); }
+      if (e.key === "a" || e.key === "A" || e.code === "KeyA" || dKey === 1) { e.preventDefault(); window.slAnswer("a"); }
+      else if (e.key === "b" || e.key === "B" || e.code === "KeyB" || dKey === 2) { e.preventDefault(); window.slAnswer("b"); }
       else if (e.key === "r" || e.key === "R") { const r = V.duel.rounds[V.duel.i]; say(r.side === "a" ? r.p.a : r.p.b, 1.0); }
-    } else if (/^[1-3]$/.test(e.key) && document.getElementById(`bc-opt-${Number(e.key) - 1}`) && !B.answered) { e.preventDefault(); window.bcAnswer(Number(e.key) - 1); }
+    } else if (dKey >= 1 && dKey <= 3 && document.getElementById(`bc-opt-${dKey - 1}`) && !B.answered) { e.preventDefault(); window.bcAnswer(dKey - 1); }
     else if (e.key === "Enter") { const nb = document.getElementById("sl-next") || document.getElementById("bc-next"); if (nb && document.activeElement !== nb) { e.preventDefault(); nb.click(); } }
   });
 })();

@@ -633,6 +633,150 @@ window.WRITING_MISSIONS = [
       fr: "Mesdames et Messieurs les membres du jury, penser la crise de la délibération contemporaine suppose d'interroger au préalable l'appauvrissement du langage civique. À rebours de la tyrannie de l'instant et des réflexes binaires, il importe que la parole publique reconquière l'exigence de nuance sans laquelle aucun dissensus fécond ne peut s'énoncer. Quand bien même l'économie de l'attention privilégierait l'invective au détriment de la démonstration, la rigueur conceptuelle demeure le rempart ultime contre l'arbitraire. C'est à cette aune que je me propose d'analyser, dans un premier temps, les mécanismes de la sidération rhétorique, avant d'esquisser, dans un second mouvement, les voies d'une éthique renouvelée de la discussion.",
       en: "Ladies and Gentlemen of the Jury, reflecting on the crisis of contemporary deliberation requires first questioning the impoverishment of civic language. Running counter to the tyranny of the instant and binary reflexes, it is imperative that public speech reclaim the requirement of nuance without which no fruitful dissent can be articulated. Even if the attention economy were to privilege invective at the expense of demonstration, conceptual rigor remains the ultimate bulwark against arbitrariness. It is by this yardstick that I propose to analyze, first, the mechanisms of rhetorical stupor, before outlining, in a second movement, the pathways toward a renewed ethics of discussion."
     }
+  },
+  {
+    id: "write_a1_sms_camille",
+    cefr: "A1",
+    category: "A1 — Vie Quotidienne & SMS",
+    title: "Premier SMS à Camille pour un café à Paris",
+    location: "Café de Flore — Saint-Germain (6e)",
+    forceSubjunctive: false,
+    context: "You just arrived in Paris and want to text your French friend Camille to suggest meeting for coffee tomorrow morning at 10 AM.",
+    prompt: "Write a warm, simple A1 French message (30–50 words) greeting Camille, saying you are in Paris, and asking to meet for a coffee tomorrow.",
+    requiredKeywords: [
+      { fr: "Bonjour", en: "Hello" },
+      { fr: "je suis à Paris", en: "I am in Paris" },
+      { fr: "demain matin", en: "tomorrow morning" },
+      { fr: "un café", en: "a coffee" }
+    ],
+    sentenceBuilders: [
+      { step: 1, goal: "Greet warmly and announce arrival", fr: "Salut Camille ! Je suis à Paris et je suis très content.", en: "Hi Camille! I am in Paris and I am very happy.", tiles: ["Salut Camille !", "Je suis à Paris", "et je suis", "très content."] },
+      { step: 2, goal: "Suggest meeting tomorrow", fr: "Est-ce que tu es libre demain matin à dix heures pour un café ?", en: "Are you free tomorrow morning at 10 AM for a coffee?", tiles: ["Est-ce que tu es libre", "demain matin", "à dix heures", "pour un café ?"] }
+    ],
+    nativeModelText: {
+      fr: "Salut Camille ! Je suis bien arrivé à Paris et je suis ravi. Est-ce que tu es libre demain matin à dix heures pour prendre un café en terrasse ? À très vite !",
+      en: "Hi Camille! I arrived safely in Paris and I'm delighted. Are you free tomorrow morning at 10 AM to grab a coffee on the terrace? See you very soon!"
+    }
+  },
+  {
+    id: "write_a1_reservation_hotel",
+    cefr: "A1",
+    category: "A1 — Survie & Voyages",
+    title: "Confirmer une réservation d'hôtel à Paris",
+    location: "Quartier Latin — 5e Arrondissement",
+    forceSubjunctive: false,
+    context: "Send a polite short email to a small Parisian hotel to confirm your room for two nights and ask what time breakfast starts.",
+    prompt: "Write a polite A1 email (35–55 words) confirming a room for two nights with 'vous' and asking about breakfast.",
+    requiredKeywords: [
+      { fr: "Bonjour", en: "Hello" },
+      { fr: "je voudrais", en: "I would like" },
+      { fr: "deux nuits", en: "two nights" },
+      { fr: "petit-déjeuner", en: "breakfast" }
+    ],
+    sentenceBuilders: [
+      { step: 1, goal: "Confirm the reservation politely", fr: "Bonjour, je voudrais confirmer ma réservation pour deux nuits.", en: "Hello, I would like to confirm my reservation for two nights.", tiles: ["Bonjour,", "je voudrais confirmer", "ma réservation", "pour deux nuits."] },
+      { step: 2, goal: "Ask about breakfast hours", fr: "À quelle heure commence le petit-déjeuner, s'il vous plaît ?", en: "What time does breakfast start, please?", tiles: ["À quelle heure", "commence le petit-déjeuner,", "s'il vous plaît ?"] }
+    ],
+    nativeModelText: {
+      fr: "Bonjour Madame, Monsieur, je voudrais confirmer ma réservation d'une chambre pour deux nuits, du vendredi au dimanche. À quelle heure est servi le petit-déjeuner, s'il vous plaît ? Merci beaucoup et à bientôt.",
+      en: "Hello Madam, Sir, I would like to confirm my room reservation for two nights, from Friday to Sunday. What time is breakfast served, please? Thank you very much and see you soon."
+    }
+  },
+  {
+    id: "write_a2_recit_weekend",
+    cefr: "A2",
+    category: "A2 — Récit au Passé",
+    title: "Raconter son week-end à Paris (Passé Composé & Imparfait)",
+    location: "Canal Saint-Martin — 10e Arrondissement",
+    forceSubjunctive: false,
+    context: "Write a lively postcard/message to a friend describing your Parisian weekend using both Imparfait (weather/setting) and Passé Composé (events).",
+    prompt: "Write a 60–90 word A2 story about your weekend: describe the weather (Imparfait) and 3 things you did (Passé Composé).",
+    requiredKeywords: [
+      { fr: "il faisait beau", en: "the weather was nice (Imparfait)" },
+      { fr: "je suis allé", en: "I went (Passé Composé)" },
+      { fr: "j'ai mangé", en: "I ate (Passé Composé)" },
+      { fr: "c'était génial", en: "it was great" }
+    ],
+    sentenceBuilders: [
+      { step: 1, goal: "Set the scene with Imparfait", fr: "Samedi matin, il faisait très beau et les rues étaient calmes.", en: "Saturday morning, the weather was lovely and the streets were quiet.", tiles: ["Samedi matin,", "il faisait très beau", "et les rues", "étaient calmes."] },
+      { step: 2, goal: "Narrate actions with Passé Composé", fr: "Je suis allé au marché de la Bastille, puis j'ai mangé un croissant au canal.", en: "I went to the Bastille market, then I ate a croissant by the canal.", tiles: ["Je suis allé", "au marché de la Bastille,", "puis j'ai mangé", "un croissant au canal."] }
+    ],
+    nativeModelText: {
+      fr: "Salut ! Mon week-end à Paris était superbe. Samedi, il faisait très beau : je suis allé au marché de la Bastille avec Yanis et j'ai acheté du fromage frais. Ensuite, nous avons mangé des crêpes près du canal. Dimanche, j'ai visité le Louvre : c'était génial !",
+      en: "Hi! My weekend in Paris was superb. Saturday the weather was lovely: I went to the Bastille market with Yanis and bought fresh cheese. Then we ate crêpes near the canal. Sunday I visited the Louvre: it was awesome!"
+    }
+  },
+  {
+    id: "write_a2_decaler_rdv",
+    cefr: "A2",
+    category: "A2 — Démarches & Rendez-vous",
+    title: "Décaler un rendez-vous chez le médecin",
+    location: "Cabinet Médical — 5e Arrondissement",
+    forceSubjunctive: false,
+    context: "You have an unexpected work conflict and must politely write to Dr. Claire Valéry's office to reschedule your Thursday appointment.",
+    prompt: "Write a polite A2 email (50–80 words) apologizing, explaining why you cannot come Thursday, and proposing Friday afternoon.",
+    requiredKeywords: [
+      { fr: "je suis désolé", en: "I am sorry" },
+      { fr: "un empêchement", en: "an unexpected conflict" },
+      { fr: "serait-il possible", en: "would it be possible" },
+      { fr: "vendredi après-midi", en: "Friday afternoon" }
+    ],
+    sentenceBuilders: [
+      { step: 1, goal: "Apologize and explain", fr: "Bonjour Docteur, je suis désolé mais j'ai un empêchement jeudi matin.", en: "Hello Doctor, I am sorry but I have a conflict Thursday morning.", tiles: ["Bonjour Docteur,", "je suis désolé", "mais j'ai un empêchement", "jeudi matin."] },
+      { step: 2, goal: "Propose a new slot politely", fr: "Serait-il possible de décaler notre rendez-vous à vendredi après-midi ?", en: "Would it be possible to move our appointment to Friday afternoon?", tiles: ["Serait-il possible", "de décaler notre rendez-vous", "à vendredi après-midi ?"] }
+    ],
+    nativeModelText: {
+      fr: "Bonjour Docteur Valéry, je suis vraiment désolé, mais j'ai un empêchement professionnel jeudi matin. Serait-il possible de décaler mon rendez-vous à vendredi après-midi ? Je vous remercie par avance pour votre compréhension. Bien cordialement.",
+      en: "Hello Dr. Valéry, I am truly sorry, but I have a work conflict Thursday morning. Would it be possible to move my appointment to Friday afternoon? Thank you in advance for your understanding. Warm regards."
+    }
+  },
+  {
+    id: "write_b1_opinion_teletravail",
+    cefr: "B1",
+    category: "B1 — Essai d'Opinion & Connecteurs",
+    title: "Donner son avis sur le télétravail à Paris",
+    location: "Forum Citoyen & Entreprise — Paris",
+    forceSubjunctive: false,
+    context: "A French magazine asks readers whether remote work improves quality of life or creates isolation. Present a clear, structured B1 opinion.",
+    prompt: "Write a structured B1 opinion post (100–140 words) weighing pros and cons using 'd'une part', 'cependant', and 'en conclusion'.",
+    requiredKeywords: [
+      { fr: "d'une part", en: "on the one hand" },
+      { fr: "cependant", en: "however" },
+      { fr: "en revanche", en: "on the other hand" },
+      { fr: "à mon avis", en: "in my opinion" }
+    ],
+    sentenceBuilders: [
+      { step: 1, goal: "State the main advantage", fr: "D'une part, le télétravail permet d'éviter les transports bondés et de gagner du temps.", en: "On the one hand, remote work avoids crowded transit and saves time.", tiles: ["D'une part,", "le télétravail permet", "d'éviter les transports bondés", "et de gagner du temps."] },
+      { step: 2, goal: "Introduce a nuanced counterpoint", fr: "Cependant, travailler seul toute la semaine peut créer un sentiment d'isolement.", en: "However, working alone all week can create a feeling of isolation.", tiles: ["Cependant,", "travailler seul toute la semaine", "peut créer", "un sentiment d'isolement."] }
+    ],
+    nativeModelText: {
+      fr: "À mon avis, le télétravail est une avancée formidable s'il reste équilibré. D'une part, il évite de perdre deux heures par jour dans le métro et améliore la concentration. Cependant, rester seul chez soi toute la semaine peut nuire à l'esprit d'équipe. En revanche, un rythme hybride — deux jours à la maison et trois jours au bureau — offre le meilleur des deux mondes.",
+      en: "In my opinion, remote work is a wonderful step forward if it stays balanced. On the one hand, it avoids losing two hours a day on the metro and improves focus. However, staying alone at home all week can hurt team spirit. On the other hand, a hybrid schedule—two days at home and three at the office—offers the best of both worlds."
+    }
+  },
+  {
+    id: "write_b1_reclamation_sncf",
+    cefr: "B1",
+    category: "B1 — Lettre Formelle & Pronoms",
+    title: "Réclamation polie suite à un TGV annulé",
+    location: "Gare de Lyon — Service Client SNCF",
+    forceSubjunctive: false,
+    context: "Your Paris–Lyon TGV was cancelled last minute and you had to buy a new ticket. Write a clear, firm, polite B1 refund request.",
+    prompt: "Write a 90–130 word B1 formal message explaining what happened, using object pronouns ('en', 'y', 'le') and requesting reimbursement.",
+    requiredKeywords: [
+      { fr: "je vous écris au sujet de", en: "I am writing to you regarding" },
+      { fr: "malheureusement", en: "unfortunately" },
+      { fr: "par conséquent", en: "consequently" },
+      { fr: "remboursement", en: "reimbursement / refund" }
+    ],
+    sentenceBuilders: [
+      { step: 1, goal: "State the issue clearly", fr: "Je vous écris au sujet de mon TGV Paris–Lyon qui a été annulé hier soir.", en: "I am writing regarding my Paris-Lyon TGV which was cancelled last night.", tiles: ["Je vous écris", "au sujet de mon TGV", "qui a été annulé", "hier soir."] },
+      { step: 2, goal: "Request a refund politely", fr: "Par conséquent, je vous demande le remboursement intégral de mon billet.", en: "Consequently, I request a full refund of my ticket.", tiles: ["Par conséquent,", "je vous demande", "le remboursement intégral", "de mon billet."] }
+    ],
+    nativeModelText: {
+      fr: "Madame, Monsieur, je vous écris au sujet de mon TGV Paris–Lyon de vendredi soir, qui a malheureusement été annulé au dernier moment. J'avais une réunion importante à Lyon et je devais absolument m'y rendre ; j'ai donc dû racheter un billet. Par conséquent, je sollicite le remboursement intégral de mon trajet initial. Je vous remercie par avance de votre retour rapide.",
+      en: "Madam, Sir, I am writing regarding my Friday evening Paris–Lyon TGV, which was unfortunately cancelled at the last minute. I had an important meeting in Lyon and absolutely had to get there; I therefore had to buy another ticket. Consequently, I request a full refund of my original journey. Thank you in advance for your prompt reply."
+    }
   }
 ];
 
@@ -1847,6 +1991,90 @@ window.PARIS_LIFE_DISTRICTS = [
             reputationDelta: -15,
             feedback: "⚠️ Heartfelt, but save 'kiffer' for the Canal Saint-Martin afterparty!"
           }
+        ]
+      }
+    ]
+  },
+  {
+    id: "district_boulangerie_bastille",
+    name: "Boulangerie & Marché Bastille",
+    arrondissement: "11e Arrondissement",
+    cefrRange: "A1",
+    vibe: "Crisp morning air, warm baguettes tradition, market stalls, and essential everyday Parisian politeness.",
+    icon: "🥖",
+    accentColor: "#f59e0b",
+    targetRegister: "Courant",
+    npc: {
+      name: "Jean-Luc le Boulanger",
+      role: "Artisan Boulanger de Bastille",
+      avatar: "🥖",
+      personality: "Warm and proud of his craft — loves when newcomers start with 'Bonjour' and order clearly with 'Je voudrais'."
+    },
+    steps: [
+      {
+        stepIndex: 1,
+        situation: "You step up to the warm golden counter at 8:30 AM. The line behind you moves quickly: « Bonjour ! Qu'est-ce qui vous ferait plaisir ce matin ? »",
+        npcLineFr: "Bonjour ! Qu'est-ce qui vous ferait plaisir ce matin ?",
+        npcLineEn: "Hello! What would make you happy this morning?",
+        requiredRegister: "Courant",
+        choices: [
+          { register: "Courant", fr: "Bonjour Monsieur ! Je voudrais une baguette tradition bien cuite et un croissant, s'il vous plaît.", en: "Hello Sir! I would like a well-baked traditional baguette and a croissant, please.", isOptimal: true, reputationDelta: +20, feedback: "✅ Parfait ! Starting with 'Bonjour' + 'Je voudrais' + 's'il vous plaît' wins every Parisian baker's heart." },
+          { register: "Familier", fr: "Donne-moi vite du pain, j'ai pas le temps !", en: "Give me bread fast, I don't have time!", isOptimal: false, reputationDelta: -15, feedback: "❌ Skipping 'Bonjour' and using imperative 'Donne-moi' with a baker is a major French faux pas!" },
+          { register: "Soutenu", fr: "Veuillez agréer ma requête d'un pain allongé.", en: "Please accept my formal petition for an elongated bread.", isOptimal: false, reputationDelta: +5, feedback: "⚠️ Funny and super polite, but way too stiff for a neighborhood bakery!" }
+        ]
+      },
+      {
+        stepIndex: 2,
+        situation: "The baker hands you the warm paper bag: « Et avec ceci, ce sera tout ? »",
+        npcLineFr: "Voilà une belle tradition bien chaude ! Et avec ceci, ce sera tout ?",
+        npcLineEn: "Here's a lovely warm tradition baguette! And with that, will that be all?",
+        requiredRegister: "Courant",
+        choices: [
+          { register: "Courant", fr: "Oui merci, ce sera tout ! Je peux payer par carte sans contact ?", en: "Yes thank you, that will be all! Can I pay by contactless card?", isOptimal: true, reputationDelta: +20, feedback: "✅ Spot-on everyday Paris checkout phrasing!" },
+          { register: "Familier", fr: "Ouais c'est bon, tu prends la carte ou quoi ?", en: "Yeah it's fine, do you take card or what?", isOptimal: false, reputationDelta: -10, feedback: "❌ Avoid tutoying ('tu prends') a shopkeeper you don't know!" },
+          { register: "Soutenu", fr: "Point davantage, cher maître artisan.", en: "No more, dear master artisan.", isOptimal: false, reputationDelta: +5, feedback: "⚠️ Charming 18th-century flair, though 'Oui merci, ce sera tout' is what Parisians actually say." }
+        ]
+      }
+    ]
+  },
+  {
+    id: "district_odeon_debat",
+    name: "Ciné-Club & Débat Odéon",
+    arrondissement: "6e Arrondissement",
+    cefrRange: "B2",
+    vibe: "Post-screening debate at Odéon cinema: nuanced opinions, subjunctive triggers, and courteous French disagreement.",
+    icon: "🎬",
+    accentColor: "#a855f7",
+    targetRegister: "Courant",
+    npc: {
+      name: "Claire Delorme",
+      role: "Critique de Cinéma à Odéon",
+      avatar: "🎬",
+      personality: "Loves passionate yet nuanced debate — rewards B2 connectors ('cependant', 'bien que') and sharp viewpoints."
+    },
+    steps: [
+      {
+        stepIndex: 1,
+        situation: "After the film screening at Odéon, Claire asks the room: « Ne trouvez-vous pas que les plateformes de streaming menacent le cinéma en salle ? »",
+        npcLineFr: "Ne trouvez-vous pas que les plateformes de streaming menacent le cinéma en salle ?",
+        npcLineEn: "Don't you think streaming platforms threaten movie theaters?",
+        requiredRegister: "Courant",
+        choices: [
+          { register: "Courant", fr: "Bien que le streaming offre une grande accessibilité, rien ne remplace l'émotion collective d'une salle obscure.", en: "Although streaming offers great accessibility, nothing replaces the collective emotion of a dark theater.", isOptimal: true, reputationDelta: +25, feedback: "✅ Textbook B2 brilliance: 'Bien que + subjunctive' + balanced nuance!" },
+          { register: "Familier", fr: "Franchement les cinés c'est trop cher, tout le monde s'en fout maintenant.", en: "Honestly cinemas are too expensive, nobody cares anymore.", isOptimal: false, reputationDelta: -10, feedback: "❌ Too blunt and informal for an Odéon film debate." },
+          { register: "Soutenu", fr: "Le septième art périclite inexorablement sous le joug algorithmique.", en: "The seventh art inexorably declines under the algorithmic yoke.", isOptimal: false, reputationDelta: +15, feedback: "⚠️ Very eloquent, though slightly over-dramatic without conceding the streaming convenience." }
+        ]
+      },
+      {
+        stepIndex: 2,
+        situation: "A spectator disagrees with you. How do you acknowledge their point and defend yours with B2 grace?",
+        npcLineFr: "Mais avec le prix des billets aujourd'hui, les jeunes préfèrent regarder les films chez eux !",
+        npcLineEn: "But with ticket prices today, young people prefer watching movies at home!",
+        requiredRegister: "Courant",
+        choices: [
+          { register: "Courant", fr: "Je comprends tout à fait votre argument ; en revanche, les cartes illimitées et les tarifs réduits prouvent que les salles attirent encore les jeunes.", en: "I completely understand your point; on the other hand, unlimited passes and student rates prove theaters still attract young people.", isOptimal: true, reputationDelta: +25, feedback: "✅ Classic French debate etiquette: validate first, pivot cleanly with 'en revanche'!" },
+          { register: "Familier", fr: "N'importe quoi, t'as rien compris au cinéma !", en: "Nonsense, you don't understand cinema at all!", isOptimal: false, reputationDelta: -20, feedback: "❌ Never dismiss someone's view aggressively in a French cultural salon." },
+          { register: "Soutenu", fr: "Votre observation n'est point dénuée de fondement, nonobstant les abonnements.", en: "Your observation is not devoid of merit, notwithstanding subscriptions.", isOptimal: false, reputationDelta: +15, feedback: "⚠️ Grammatically sharp, though slightly archaic for a lively Odéon cinema Q&A." }
         ]
       }
     ]

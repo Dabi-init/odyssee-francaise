@@ -474,15 +474,22 @@
     const c = document.getElementById("gym-card"); if (c) c.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
+  window.RPG_GYM_BACK = function () {
+    if (gym.mode === "scenes" && gym.scene) { gym.scene = null; rerender(); return true; }
+    if (gym.mode === "readings" && gym.reading) { gym.reading = null; rerender(); return true; }
+    if (gym.mode) { gym.mode = null; rerender(); return true; }
+    return false;
+  };
   window.addEventListener("keydown", (e) => {
     if (!document.getElementById("gym-card")) return;
     const tag = (e.target && e.target.tagName) || "";
     if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return;
-    if (["1", "2", "3", "4"].includes(e.key) && document.getElementById(`gym-opt-${Number(e.key) - 1}`) && !gym.answered) {
+    const dKey = /^[1-4]$/.test(e.key) ? +e.key : (/^(?:Digit|Numpad)([1-4])$/.test(e.code || "") ? +RegExp.$1 : 0);
+    if (dKey >= 1 && dKey <= 4 && document.getElementById(`gym-opt-${dKey - 1}`) && !gym.answered) {
       e.preventDefault();
-      if (gym.mode === "scenes") window.gymSceneAnswer(Number(e.key) - 1);
-      else if (gym.mode === "readings") window.gymReadAnswer(Number(e.key) - 1);
-      else window.gymAnswer(Number(e.key) - 1);
+      if (gym.mode === "scenes") window.gymSceneAnswer(dKey - 1);
+      else if (gym.mode === "readings") window.gymReadAnswer(dKey - 1);
+      else window.gymAnswer(dKey - 1);
     } else if (e.key === "Enter") {
       const nb = document.getElementById("gym-next-btn");
       if (nb && document.activeElement !== nb) { e.preventDefault(); nb.click(); }

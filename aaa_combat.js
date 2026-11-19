@@ -442,17 +442,18 @@
         window.addEventListener("keydown", (e) => {
           if (!this.canvas || !document.body.contains(this.canvas)) return;
           if (["INPUT", "TEXTAREA", "SELECT"].includes((e.target && e.target.tagName) || "")) return;
-          if (e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "d" || e.key === "D") {
+          if (e.altKey) return;
+          if (e.key === "ArrowRight" || e.key === "ArrowUp" || e.code === "KeyD") {
             e.preventDefault();
             this.moveToNode(Math.min(nodeCount(), this.selectedNodeNum + 1));
-          } else if (e.key === "ArrowLeft" || e.key === "ArrowDown" || e.key === "a" || e.key === "A") {
+          } else if (e.key === "ArrowLeft" || e.key === "ArrowDown" || e.code === "KeyA") {
             e.preventDefault();
             this.moveToNode(Math.max(1, this.selectedNodeNum - 1));
-          } else if (e.key === "+" || e.key === "=") {
+          } else if (e.key === "+" || e.key === "=" || e.code === "Equal" || e.code === "NumpadAdd") {
             this.zoomIn();
-          } else if (e.key === "-" || e.key === "_") {
+          } else if (e.key === "-" || e.key === "_" || e.code === "Minus" || e.code === "NumpadSubtract") {
             this.zoomOut();
-          } else if (e.key === "0") {
+          } else if (e.key === "0" || e.code === "Digit0" || e.code === "Numpad0") {
             this.fit();
           } else if (e.key === "Enter") {
             e.preventDefault();

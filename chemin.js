@@ -30,7 +30,7 @@
   const PRIV_STORAGE_KEY = "ODYSSEE_PRIVATE_AUTH_V24";
   const CLOUD_TOPIC = "odyssee_srt_priv24_8e3f9a1c7b2d4065e9a2c4f8";
   const CLOUD_GIST_ID = "6828a599232d8fea3069b7b45a4b14dd";
-  const TABLET_PWA_URL = "https://dabi-init.github.io/odyssee-francaise/?k=srt_ody24_7f9a3e1c8b4d2065a9e4&v=26.0";
+  const TABLET_PWA_URL = "https://dabi-init.github.io/odyssee-francaise/?k=srt_ody24_7f9a3e1c8b4d2065a9e4&v=27.0";
   const CLOUD_SYNC = {
     hydrated: false,
     syncing: false,
@@ -115,7 +115,7 @@
       <div class="ody-private-gate" id="ody-private-gate">
         <div class="priv-gate-card">
           <div class="priv-gate-badge">🔒 ESPACE PRIVÉ EXCLUSIF · ACCÈS RESTREINT</div>
-          <img src="assets/odyssee_icon.png?v=26.0" class="priv-gate-icon" alt="">
+          <img src="assets/odyssee_icon.png?v=27.0" class="priv-gate-icon" alt="">
           <h2>L'Odyssée Française · Édition Privée</h2>
           <p class="priv-gate-sub">Cet espace d'apprentissage et sa sauvegarde Cloud sont strictement privés et réservés exclusivement à leur propriétaire. Aucun accès public n'est autorisé.</p>
           <div class="priv-gate-form">
@@ -461,6 +461,18 @@
         c.chroniquesDone = c.chroniquesDone || {};
         Object.keys(ec.chroniquesDone).forEach((k) => {
           if (!c.chroniquesDone[k] && ec.chroniquesDone[k]) { c.chroniquesDone[k] = ec.chroniquesDone[k]; changed = true; }
+        });
+      }
+      if (ec.levelSkills && typeof ec.levelSkills === "object") {
+        c.levelSkills = c.levelSkills || {};
+        Object.keys(ec.levelSkills).forEach((lv) => {
+          if (ec.levelSkills[lv] && typeof ec.levelSkills[lv] === "object") {
+            c.levelSkills[lv] = c.levelSkills[lv] || {};
+            Object.keys(ec.levelSkills[lv]).forEach((sk) => {
+              const es = ec.levelSkills[lv][sk], cs = c.levelSkills[lv][sk];
+              if (es && (!cs || (es.n || 0) > (cs.n || 0))) { c.levelSkills[lv][sk] = es; changed = true; }
+            });
+          }
         });
       }
       if (ec.sealsClaimed && typeof ec.sealsClaimed === "object") {
@@ -848,15 +860,21 @@
     { k: "vocabulary", ic: "💎", label: "Lexique & idiomes (Vocabulary)" },
     { k: "pronunciation", ic: "👄", label: "Phonétique & prosodie (Pronunciation)" }
   ];
-  function skillAdd(skill, ok) {
+  function skillAdd(skill, ok, cefrLv) {
     if (!skill) return;
     const list = Array.isArray(skill) ? skill : [skill];
     const c = CH();
+    const lv = CEFR.includes(cefrLv) ? cefrLv : (SES && SES.node && CEFR.includes(SES.node.cefr) ? SES.node.cefr : (currentLevel() === "NATIF" ? "C2" : currentLevel()));
+    c.levelSkills = c.levelSkills || {};
+    c.levelSkills[lv] = c.levelSkills[lv] || {};
     list.forEach((sk) => {
       if (!sk) return;
       const k = c.skills[sk] = c.skills[sk] || { n: 0, ok: 0, ema: 0.5 };
       k.n += 1; if (ok) k.ok += 1;
       k.ema = +(k.ema == null ? (ok ? 0.72 : 0.28) : k.ema * 0.85 + (ok ? 0.15 : 0)).toFixed(3);
+      const lk = c.levelSkills[lv][sk] = c.levelSkills[lv][sk] || { n: 0, ok: 0, ema: 0.5 };
+      lk.n += 1; if (ok) lk.ok += 1;
+      lk.ema = +(lk.ema == null ? (ok ? 0.72 : 0.28) : lk.ema * 0.85 + (ok ? 0.15 : 0)).toFixed(3);
     });
   }
   function gainXP(xp) {
@@ -1102,26 +1120,22 @@
     fu.nodes.push(addNode({ id: "gate:NATIF", kind: "natif", title: "Le Grand Examen Natif", cefr: "NATIF", unit: fu.id, level: "NATIF", royal: true }));
     UNITS.push(fu);
     UNITS.forEach((u) => { const seenT = {}; u.nodes.forEach((n) => { n.unitObj = u; const k = n.title.toLowerCase(); if (seenT[k]) n.title = `${n.title} · ${n.kind === "supplementary" ? "practice" : (KIND_META[n.kind] || {}).label || "II"}`; seenT[k] = true; }); });
-    // Mark "Voie Royale" (Essential Fast-Track: ~12 high-leverage nodes per CEFR level across all 4 skills)
+    // Mark "Voie Royale — Fondation Complète": 1 Core stage from EVERY single world in each CEFR level + audio dialogues + A1 Sound Bootcamps (ZERO skipped foundations!)
     CEFR.forEach((lv) => {
       const lvNodes = NODES.filter((n) => n.cefr === lv);
       if (lv === "A1") {
-        lvNodes.filter((n) => n.kind === "boot").slice(0, 2).forEach((n) => { n.royal = true; });
+        lvNodes.filter((n) => n.kind === "boot").slice(0, 5).forEach((n) => { n.royal = true; });
       }
       const lvUnits = UNITS.filter((u) => u.world && u.cefr === lv);
-      const pickWCount = Math.min(5, lvUnits.length);
-      for (let i = 0; i < pickWCount; i++) {
-        const uIdx = pickWCount === 1 ? 0 : Math.round((i * (lvUnits.length - 1)) / (pickWCount - 1));
-        const u = lvUnits[uIdx];
-        if (u) {
-          const coreSt = u.nodes.find((n) => n.kind === "core") || u.nodes[0];
-          if (coreSt) coreSt.royal = true;
-        }
-      }
+      lvUnits.forEach((u) => {
+        const coreSt = u.nodes.find((n) => n.kind === "core") || u.nodes[0];
+        if (coreSt) coreSt.royal = true;
+      });
+      lvNodes.filter((n) => n.kind === "exercise").slice(0, 3).forEach((n) => { n.royal = true; });
       lvNodes.filter((n) => n.kind === "district").slice(0, 2).forEach((n) => { n.royal = true; });
       lvNodes.filter((n) => n.kind === "scene").slice(0, 1).forEach((n) => { n.royal = true; });
       lvNodes.filter((n) => n.kind === "read").slice(0, 1).forEach((n) => { n.royal = true; });
-      lvNodes.filter((n) => n.kind === "atelier").slice(0, 1).forEach((n) => { n.royal = true; });
+      lvNodes.filter((n) => n.kind === "atelier").slice(0, 2).forEach((n) => { n.royal = true; });
       lvNodes.filter((n) => n.kind === "mission").slice(0, 1).forEach((n) => { n.royal = true; });
       const bosses = lvNodes.filter((n) => n.kind === "boss");
       if (bosses.length) bosses[bosses.length - 1].royal = true;
@@ -1220,7 +1234,7 @@
 
   // =================================================================== SESSION BUILDERS
   // A step = { k: kind, ...data, skill, card? }. Gradable kinds re-queue on error.
-  const GRADABLE = new Set(["mcq", "listen", "build", "type", "dictee", "speak", "match", "dialogue", "shadow", "memory", "reflex", "simturn", "quest", "register", "radio", "enquete", "liaison", "forgeron", "joute", "idiome", "synthese", "periode", "concordance", "ame", "pensee"]);
+  const GRADABLE = new Set(["mcq", "listen", "build", "type", "dictee", "speak", "match", "dialogue", "shadow", "memory", "reflex", "simturn", "quest", "register", "radio", "enquete", "liaison", "forgeron", "joute", "idiome", "synthese", "periode", "concordance", "ame", "pensee", "explore", "visreflex", "swipe"]);
   function rhythmChunks(fr) {
     const clean = String(fr || "").trim();
     if (!clean) return [];
@@ -1554,22 +1568,39 @@
     const verbs = (DATA && Array.isArray(DATA.verbs) && DATA.verbs.length) ? DATA.verbs : [];
     if (!verbs.length) return [];
     const r = cefrRank(cefr);
-    const prefTenses = r <= 1
-      ? ["Présent", "Passé composé"]
-      : r <= 3
-        ? ["Imparfait", "Futur simple", "Conditionnel présent", "Passé composé"]
-        : ["Subjonctif présent", "Plus-que-parfait", "Conditionnel présent", "Futur simple"];
+    const A1_CORE = new Set(["être", "avoir", "aller", "faire", "dire", "pouvoir", "vouloir", "venir", "prendre", "parler", "manger", "boire", "aimer", "habiter", "travailler", "finir", "voir", "savoir", "mettre", "donner"]);
+    const prefTenses = r === 0
+      ? ["Présent", "Impératif présent"]
+      : r === 1
+        ? ["Présent", "Passé composé", "Imparfait", "Futur simple"]
+        : r === 2
+          ? ["Passé composé", "Imparfait", "Futur simple", "Conditionnel présent"]
+          : r === 3
+            ? ["Subjonctif présent", "Plus-que-parfait", "Conditionnel passé", "Conditionnel présent"]
+            : ["Subjonctif présent", "Subjonctif passé", "Plus-que-parfait", "Conditionnel passé", "Futur antérieur"];
+    const verbPool = r === 0
+      ? verbs.filter((v) => v && A1_CORE.has(String(v.infinitive || v.verb || v.fr || "").toLowerCase()))
+      : r === 1
+        ? verbs.slice(0, Math.min(45, verbs.length))
+        : r === 2
+          ? verbs.slice(0, Math.min(68, verbs.length))
+          : verbs;
+    const poolToUse = verbPool.length >= 6 ? verbPool : verbs;
     const contextCue = {
       "Présent": "En ce moment même à Paris :",
+      "Impératif présent": "Conseil ou ordre poli à Paris :",
       "Passé composé": "Hier soir, lors de la rencontre :",
       "Imparfait": "Autrefois, chaque automne :",
       "Futur simple": "Dès demain matin, sans faute :",
       "Conditionnel présent": "Si les conditions étaient réunies :",
-      "Plus-que-parfait": "Avant même que la séance n'eût commencé :",
-      "Subjonctif présent": "Il est impératif que / Bien que…"
+      "Conditionnel passé": "Si nous avions agi plus tôt :",
+      "Plus-que-parfait": "Avant même que la séance ne commence :",
+      "Futur antérieur": "D'ici demain soir, une fois terminé :",
+      "Subjonctif présent": "Il est impératif que / Bien que…",
+      "Subjonctif passé": "Bien qu'il ait déjà…"
     };
     const out = [];
-    for (const v of shuffle(verbs)) {
+    for (const v of shuffle(poolToUse)) {
       if (out.length >= max) break;
       if (!v || !v.tenses) continue;
       const avail = prefTenses.filter((t) => Array.isArray(v.tenses[t]) && v.tenses[t].length >= 4);
@@ -3412,7 +3443,26 @@
   // ---- Living French Situation, Register & Radio Builders
   function buildQuestSteps(cefr, max = 1, worldTitle = "") {
     const out = []; const r = cefrRank(cefr); const G = GYM();
-    const dists = shuffle(DISTRICTS() || []);
+    const allDists = DISTRICTS() || [];
+    const distRank = (d) => {
+      const cr = String((d && d.cefrRange) || (d && d.cefr) || "").toUpperCase();
+      if (cr.startsWith("A1")) return 0;
+      if (cr.startsWith("A2")) return 1;
+      if (cr.startsWith("B1")) return 2;
+      if (cr.startsWith("B2")) return 3;
+      if (cr.startsWith("C1")) return 4;
+      if (cr.startsWith("C2")) return 5;
+      const id = String((d && d.id) || "");
+      if (id.includes("boulangerie") || id.includes("cafe")) return 0;
+      if (id.includes("gare") || id.includes("canal") || id.includes("medical")) return 1;
+      if (id.includes("marais") || id.includes("immobilier")) return 2;
+      if (id.includes("odeon") || id.includes("defense")) return 3;
+      if (id.includes("justice") || id.includes("mairie")) return 4;
+      return 5;
+    };
+    const exactDists = allDists.filter((d) => distRank(d) === r);
+    const nearDists = allDists.filter((d) => Math.abs(distRank(d) - r) <= 1);
+    const dists = shuffle(exactDists.length ? exactDists : (nearDists.length ? nearDists : allDists));
     for (const d of dists) {
       if (out.length >= max) break;
       const st = pick(d.steps || []);
@@ -3547,21 +3597,123 @@
     return out.slice(0, max);
   }
   function nativeSteps(cefr, max) {
+    const r = cefrRank(cefr);
+    const bucketA = shuffle([
+      ...buildAmeSteps(cefr, 1),
+      ...buildPenseeSteps(cefr, 1),
+      ...buildQuestSteps(cefr, 1),
+      ...buildVisReflexSteps(cefr, 1)
+    ]);
+    const bucketB = shuffle([
+      ...buildForgeronSteps(cefr, 1),
+      ...buildLiaisonSteps(cefr, 1),
+      ...buildSwipeSteps(cefr, 1),
+      ...(r >= 1 ? buildConcordanceSteps(cefr, 1) : []),
+      ...(r >= 2 ? buildPeriodeSteps(cefr, 1) : [])
+    ]);
+    const bucketC = shuffle([
+      ...buildRadioSteps(cefr, 1),
+      ...buildRegisterSteps(cefr, 1),
+      ...(r >= 1 ? buildIdiomeSteps(cefr, 1) : []),
+      ...(r >= 2 ? buildEnqueteSteps(cefr, 1) : []),
+      ...(r >= 2 ? buildJouteSteps(cefr, 1) : []),
+      ...(r >= 3 ? buildSyntheseSteps(cefr, 1) : [])
+    ]);
     const out = [];
-    out.push(...buildAmeSteps(cefr, 1));
-    out.push(...buildPenseeSteps(cefr, 1));
-    out.push(...buildQuestSteps(cefr, 1));
-    out.push(...buildIdiomeSteps(cefr, 1));
-    out.push(...buildPeriodeSteps(cefr, 1));
-    out.push(...buildConcordanceSteps(cefr, 1));
-    out.push(...buildEnqueteSteps(cefr, 1));
-    if (cefrRank(cefr) >= 1) out.push(...buildJouteSteps(cefr, 1));
-    if (cefrRank(cefr) >= 2) out.push(...buildSyntheseSteps(cefr, 1));
-    out.push(...buildForgeronSteps(cefr, 1));
-    out.push(...buildLiaisonSteps(cefr, 1));
-    out.push(...buildRegisterSteps(cefr, 1));
-    out.push(...buildRadioSteps(cefr, 1));
+    if (bucketA[0]) out.push(bucketA[0]);
+    if (bucketB[0]) out.push(bucketB[0]);
+    if (bucketC[0]) out.push(bucketC[0]);
+    const rest = shuffle(bucketA.slice(1).concat(bucketB.slice(1), bucketC.slice(1)));
+    while (out.length < (max || 3) && rest.length) out.push(rest.shift());
     return out.slice(0, max || 3);
+  }
+  function buildExploreSteps(sceneIdOrCefr) {
+    const scenes = Array.isArray(window.VISUAL_SCENES) ? window.VISUAL_SCENES : [];
+    if (!scenes.length) return [];
+    let sc = scenes.find((s) => s.id === sceneIdOrCefr);
+    if (!sc && CEFR.includes(sceneIdOrCefr)) {
+      const exact = scenes.filter((s) => s.cefr === sceneIdOrCefr);
+      sc = exact.length ? pick(exact) : scenes[0];
+    }
+    if (!sc) sc = scenes[0];
+    const hunts = shuffle((sc.hotspots || []).slice()).slice(0, 2);
+    return [{
+      k: "explore",
+      sceneId: sc.id,
+      level: sc.cefr,
+      title: sc.title,
+      place: sc.place,
+      bg: sc.bg,
+      npc: sc.npc,
+      npcName: sc.npcName,
+      introFr: sc.introFr,
+      hotspots: sc.hotspots,
+      hunts: hunts.map((h) => h.id),
+      skill: ["listening", "vocabulary"]
+    }];
+  }
+  function buildExploreSession(sceneIdOrCefr) {
+    const scList = Array.isArray(window.VISUAL_SCENES) ? window.VISUAL_SCENES : [];
+    const exact = scList.find((s) => s.id === sceneIdOrCefr) || scList.find((s) => s.cefr === sceneIdOrCefr) || scList[0];
+    if (!exact) return [];
+    const steps = buildExploreSteps(exact.id);
+    const vis = buildVisReflexSteps(exact.cefr, 2);
+    steps.push(...vis);
+    return steps;
+  }
+  function buildVisReflexSteps(cefr, max = 2) {
+    const pool = Array.isArray(window.VISREFLEX_POOL) ? window.VISREFLEX_POOL : [];
+    const scenes = Array.isArray(window.VISUAL_SCENES) ? window.VISUAL_SCENES : [];
+    if (pool.length < 4 || scenes.length < 4) return [];
+    const r = cefrRank(cefr);
+    const exact = pool.filter((x) => cefrRank(x.cefr) === r);
+    const near = pool.filter((x) => Math.abs(cefrRank(x.cefr) - r) <= 1);
+    const chosen = shuffle(exact.length >= max ? exact : (near.length >= max ? near : pool)).slice(0, max);
+    return chosen.map((item) => {
+      const others = shuffle(pool.filter((x) => x.sceneId !== item.sceneId)).slice(0, 3);
+      const opts = shuffle([item].concat(others)).map((x) => {
+        const sc = scenes.find((s) => s.id === x.sceneId) || scenes[0];
+        return { sceneId: x.sceneId, labelFr: x.labelFr, bg: sc.bg, ok: x.sceneId === item.sceneId };
+      });
+      return {
+        k: "visreflex",
+        level: item.cefr,
+        sceneId: item.sceneId,
+        fr: item.fr,
+        answer: item.labelFr,
+        options: opts,
+        skill: ["listening", "vocabulary"]
+      };
+    });
+  }
+  function buildSwipeSteps(cefr, max = 2) {
+    const decks = window.SWIPE_DECKS || {};
+    const lv = CEFR.includes(cefr) ? cefr : "A1";
+    const deck = decks[lv] || decks.A1;
+    if (!deck || !(deck.cards || []).length) return [];
+    return shuffle(deck.cards).slice(0, max).map((card) => ({
+      k: "swipe",
+      level: lv,
+      deckTitle: deck.title,
+      leftLabel: deck.leftLabel,
+      rightLabel: deck.rightLabel,
+      prompt: card.prompt,
+      sub: card.sub,
+      side: card.side,
+      fr: card.answerFr,
+      answer: card.answerFr,
+      why: card.why,
+      skill: ["grammar", "vocabulary"]
+    }));
+  }
+  function buildSwipeSession(cefr) {
+    const lv = CEFR.includes(cefr) ? cefr : (currentLevel() === "NATIF" ? "C2" : currentLevel());
+    const decks = window.SWIPE_DECKS || {};
+    const deck = decks[lv] || decks.A1;
+    if (!deck) return [];
+    const steps = [{ k: "intro", title: deck.title, place: `⚡ Arcade Tactile · Niveau ${lv}`, goal: "Glissez à Gauche (⬅️) ou à Droite (➡️) — ou utilisez les flèches du clavier Logitech !" }];
+    steps.push(...buildSwipeSteps(lv, Math.min(6, deck.cards.length)));
+    return steps;
   }
 
   // ---- regular stage
@@ -3645,7 +3797,7 @@
     if (sim) steps.push(sim);
     return steps.filter(Boolean);
   }
-  const GRADED_KINDS = new Set(["mcq", "listen", "build", "type", "dictee", "speak", "match", "dialogue", "shadow", "memory", "reflex", "simturn", "quest", "register", "radio", "enquete", "liaison", "forgeron", "joute", "idiome", "synthese", "periode", "concordance", "ame", "pensee"]);
+  const GRADED_KINDS = new Set(["mcq", "listen", "build", "type", "dictee", "speak", "match", "dialogue", "shadow", "memory", "reflex", "simturn", "quest", "register", "radio", "enquete", "liaison", "forgeron", "joute", "idiome", "synthese", "periode", "concordance", "ame", "pensee", "explore", "visreflex", "swipe"]);
   function topUp(steps, pool, cefr, min) {
     let g = steps.filter((s) => s && GRADED_KINDS.has(s.k)).length;
     if (g >= min) return steps;
@@ -3669,16 +3821,19 @@
     let ci = 0;
     kinds.forEach((k) => { let s = null; while (!s && ci < cards.length) s = cardStep(k, cards[ci++], pool, n.cefr); if (s) steps.push(s); });
     const m = matchStep(cards.slice(ci, ci + 5)); if (m) steps.splice(4, 0, m);
+    const bossRk = cefrRank(n.cefr);
     steps.push(...buildAmeSteps(n.cefr, 1));
     steps.push(...buildPenseeSteps(n.cefr, 1));
     steps.push(...buildQuestSteps(n.cefr, 1, n.title));
-    steps.push(...buildIdiomeSteps(n.cefr, 1));
-    steps.push(...buildPeriodeSteps(n.cefr, 1));
-    steps.push(...buildConcordanceSteps(n.cefr, 1));
-    steps.push(...buildEnqueteSteps(n.cefr, 1));
-    if (cefrRank(n.cefr) >= 1) steps.push(...buildJouteSteps(n.cefr, 1));
+    steps.push(...buildVisReflexSteps(n.cefr, 1));
+    steps.push(...buildSwipeSteps(n.cefr, 1));
     steps.push(...buildForgeronSteps(n.cefr, 1));
-    steps.push(...buildRegisterSteps(n.cefr, 1));
+    if (bossRk >= 1) steps.push(...buildIdiomeSteps(n.cefr, 1));
+    if (bossRk >= 1) steps.push(...buildConcordanceSteps(n.cefr, 1));
+    if (bossRk >= 2) steps.push(...buildPeriodeSteps(n.cefr, 1));
+    if (bossRk >= 2) steps.push(...buildEnqueteSteps(n.cefr, 1));
+    if (bossRk >= 2) steps.push(...buildJouteSteps(n.cefr, 1));
+    if (bossRk >= 1) steps.push(...buildRegisterSteps(n.cefr, 1));
     const sim = buildSimTurnFromCards(cards, n.world && n.world.title);
     if (sim) steps.push(sim);
     return steps.filter(Boolean);
@@ -3907,26 +4062,29 @@
       const st = cardStep(kinds[i % kinds.length], c, pool, lv) || cardStep("memory", c, pool, lv) || cardStep("fr2en", c, pool, lv);
       if (st) steps.push(st);
     });
+    const wsRk = cefrRank(lv);
     if (chosen === "pronunciation") steps.push(...buildLiaisonSteps(lv, 2));
     if (chosen === "listening" || chosen === "reading") {
+      steps.push(...buildVisReflexSteps(lv, 1));
       steps.push(...buildRadioSteps(lv, 1));
-      steps.push(...buildSyntheseSteps(lv, 1));
-      steps.push(...buildIdiomeSteps(lv, 1));
+      if (wsRk >= 2) steps.push(...buildSyntheseSteps(lv, 1));
+      if (wsRk >= 1) steps.push(...buildIdiomeSteps(lv, 1));
     }
     if (chosen === "grammar" || chosen === "writing" || chosen === "reading") {
-      steps.push(...buildPeriodeSteps(lv, 1));
-      steps.push(...buildConcordanceSteps(lv, 2));
-      steps.push(...buildEnqueteSteps(lv, 2));
+      steps.push(...buildSwipeSteps(lv, 2));
       steps.push(...buildForgeronSteps(lv, 2));
-      steps.push(...buildJouteSteps(lv, 1));
-      steps.push(...buildRegisterSteps(lv, 1));
+      if (wsRk >= 1) steps.push(...buildConcordanceSteps(lv, 1));
+      if (wsRk >= 2) steps.push(...buildPeriodeSteps(lv, 1));
+      if (wsRk >= 2) steps.push(...buildEnqueteSteps(lv, 1));
+      if (wsRk >= 2) steps.push(...buildJouteSteps(lv, 1));
+      if (wsRk >= 1) steps.push(...buildRegisterSteps(lv, 1));
     }
     if (chosen === "speaking" || chosen === "vocabulary") {
       steps.push(...buildAmeSteps(lv, 2));
       steps.push(...buildPenseeSteps(lv, 2));
-      steps.push(...buildIdiomeSteps(lv, 2));
-      steps.push(...buildQuestSteps(lv, 2));
-      steps.push(...buildJouteSteps(lv, 1));
+      steps.push(...buildQuestSteps(lv, 1));
+      if (wsRk >= 1) steps.push(...buildIdiomeSteps(lv, 1));
+      if (wsRk >= 2) steps.push(...buildJouteSteps(lv, 1));
     }
     const sim = buildSimTurnFromCards(cards, meta.label);
     if (sim) steps.push(sim);
@@ -3958,11 +4116,14 @@
     return steps;
   }
   // ---- Brain-Wire Arcade modes (Blitz Réflexe, Studio Shadowing, Improv à Paris)
-  function activeArcCards() {
-    const lv = currentLevel() === "NATIF" ? "C2" : currentLevel();
+  function activeArcCards(targetLv) {
+    const lv = CEFR.includes(targetLv) ? targetLv : (currentLevel() === "NATIF" ? "C2" : currentLevel());
     const rk = cefrRank(lv);
-    const unlockedWorlds = WORLDS.filter((w) => cefrRank(w.cefr) <= rk + 1);
-    const pool = cleanCards(unlockedWorlds.flatMap((w) => (w.stages || []).flatMap((s) => s.cards || [])).slice(0, 350));
+    const exactWorlds = WORLDS.filter((w) => cefrRank(w.cefr) === rk);
+    const prevWorlds = rk > 0 ? WORLDS.filter((w) => cefrRank(w.cefr) === rk - 1) : [];
+    const exactCards = shuffle(cleanCards(exactWorlds.flatMap((w) => (w.stages || []).flatMap((s) => s.cards || []))));
+    const spiralCards = shuffle(cleanCards(prevWorlds.flatMap((w) => (w.stages || []).flatMap((s) => s.cards || [])))).slice(0, 40);
+    const pool = exactCards.slice(0, 260).concat(spiralCards);
     return { lv, pool: pool.length ? pool : cleanCards((DATA.flashcards || []).slice(0, 120)) };
   }
   function buildBlitzSession() {
@@ -4218,7 +4379,7 @@
   }
   function buildPillarRepSession(pillar, targetLv) {
     const lv = targetLv || (currentLevel() === "NATIF" ? "C2" : currentLevel());
-    const { pool } = activeArcCards();
+    const { pool } = activeArcCards(lv);
     const rev = cleanCards(reviewCards());
     const cards = rev.concat(shuffle(pool)).filter((c) => c && c.fr && words(c.fr).length >= 3 && words(c.fr).length <= 11);
     const pickCardStep = (k1, k2, offset = 0) => {
@@ -4246,7 +4407,7 @@
     const steps = [{ k: "intro", title: m.title, place: m.place, goal: m.goal }];
     if (pillar === "read") {
       const rds = ((GYM() && GYM().readings) || []).filter((r) => r.cefr === lv);
-      const rPick = rds[0] || ((GYM() && GYM().readings) || [])[0];
+      const rPick = (rds.length ? pick(rds) : null) || ((GYM() && GYM().readings) || [])[0];
       if (rPick && rPick.questions && rPick.questions[0]) {
         const q = rPick.questions[0];
         steps.push({ k: "reading", title: rPick.title, genre: rPick.genre, text: rPick.text, glossary: rPick.glossary || [] });
@@ -4321,7 +4482,7 @@
       role: "Pote de Fac & Musicien (Argot & Oral)",
       place: "🌉 Quai de Valmy · Canal Saint-Martin",
       avatar: "🎸",
-      img: "assets/npc_moreau.jpg",
+      img: "assets/npc_yanis.webp",
       vibe: "Décontracté, t'apprend le vrai français parlé des jeunes à Paris.",
       greetingFr: "Wesh Sreenath ! Bien ou quoi ? Pose ton sac cinq minutes au bord du canal, je t'apprends comment les vrais Parisiens parlent tous les jours !",
       greetingEn: "Hey Sreenath! How's it going? Drop your bag for five minutes by the canal, I'll teach you how real Parisians talk every day!",
@@ -4542,7 +4703,7 @@
       place: "Passerelle de la Grange-aux-Belles · Canal Saint-Martin",
       sky: "#a7f3d0",
       accent: "#34d399",
-      npc: { name: "Yanis & sa Bande", role: "Musiciens du Quai de Valmy", avatar: "🎸", img: "assets/npc_moreau.jpg" },
+      npc: { name: "Yanis & sa Bande", role: "Musiciens du Quai de Valmy", avatar: "🎸", img: "assets/npc_yanis.webp" },
       props: [
         { id: "ecluse", icon: "🌉", label: "La passerelle tournante", fr: "Attends deux minutes, la péniche passe l'écluse et le pont va rouvrir.", en: "Wait two minutes, the barge is passing the lock and the bridge will reopen.", note: "« L'écluse » = canal lock; « la péniche » = river barge." },
         { id: "guitare", icon: "🎸", label: "Étui à guitare", fr: "On improvise quelques accords au bord de l'eau avant la tombée de la nuit.", en: "We're improvising a few chords by the water before nightfall.", note: "« À la tombée de la nuit » = at nightfall / dusk." },
@@ -4593,6 +4754,26 @@
   }
 
   function sceneThemeFor(node, mode, st) {
+    if (window.resolveVisualScene) {
+      const vs = window.resolveVisualScene(node, mode, st);
+      if (vs) {
+        return {
+          bg: vs.bg,
+          place: vs.place,
+          sky: "#fde68a",
+          accent: "#f59e0b",
+          npc: { name: vs.npcName || "Guide de Paris", role: `Scène ${vs.cefr || ""}`, avatar: "📍", img: vs.npc || PORTRAIT },
+          props: (vs.hotspots || []).slice(0, 3).map((h) => ({
+            id: "vs_" + vs.id + "_" + h.id,
+            icon: h.icon || "🔍",
+            label: h.fr,
+            fr: h.spokenFr || h.fr,
+            en: h.fr,
+            note: `Objet de « ${vs.title} » — écoutez la prononciation native.`
+          }))
+        };
+      }
+    }
     if (st && (st.k === "sound" || st.k === "shadow" || st.k === "radio" || st.k === "liaison") || mode === "shadowrun" || (node && node.kind === "boot")) return SCENE_THEMES.soundlab;
     if (node && (node.kind === "boss" || node.kind === "gate" || node.kind === "natif")) return SCENE_THEMES.boss;
     if ((st && (st.k === "joute" || st.k === "synthese" || st.k === "periode" || st.k === "concordance")) || mode === "jouterun" || mode === "perioderun") {
@@ -4736,10 +4917,103 @@
     </div>`;
   }
 
+  // ----------------------------------------------------------------- Universal Back & History Navigation (NAV)
+  const NAV = {
+    stack: [{ kind: "view", scene: "home" }],
+    exitToastAt: 0,
+    sentinelArmed: false,
+    push(entry) {
+      if (!entry) return;
+      const top = this.stack[this.stack.length - 1];
+      if (top && top.kind === entry.kind && top.scene === entry.scene && top.type === entry.type) {
+        this.stack[this.stack.length - 1] = entry;
+        return;
+      }
+      this.stack.push(entry);
+      if (this.stack.length > 24) this.stack.shift();
+      this.armSentinel();
+    },
+    armSentinel() {
+      if (this.sentinelArmed) return;
+      try {
+        window.history.replaceState({ ody: "root" }, "", window.location.href);
+        window.history.pushState({ ody: "sentinel" }, "");
+        this.sentinelArmed = true;
+      } catch (e) {}
+    },
+    canGoBack() {
+      if ($("ody-sheet") || $("ody-drawer") || SES) return true;
+      const sc = document.body.dataset.scene || "home";
+      if (sc !== "home") return true;
+      return this.stack.length > 1;
+    },
+    back() {
+      // 1. Sheet open -> close sheet (and restore previous sheet if stacked)
+      if ($("ody-sheet")) {
+        closeSheet();
+        if (this.stack.length > 1 && this.stack[this.stack.length - 1].kind === "sheet") this.stack.pop();
+        const prevTop = this.stack[this.stack.length - 1];
+        if (prevTop && prevTop.kind === "sheet" && typeof prevTop.restore === "function") {
+          prevTop.restore(true);
+        }
+        return true;
+      }
+      // 2. Drawer open -> close drawer
+      if ($("ody-drawer")) {
+        closeDrawer();
+        if (this.stack.length > 1 && this.stack[this.stack.length - 1].kind === "drawer") this.stack.pop();
+        return true;
+      }
+      // 3. Active session -> save & exit cleanly
+      if (SES) {
+        ACT.quit();
+        return true;
+      }
+      // 4. Secondary scene internal sub-views (Sound Lab / Native Gym)
+      const curScene = document.body.dataset.scene || "home";
+      if (curScene === "soundlab" && window.RPG_SOUNDLAB_BACK && window.RPG_SOUNDLAB_BACK()) return true;
+      if (curScene === "gym" && window.RPG_GYM_BACK && window.RPG_GYM_BACK()) return true;
+      // 5. Onboarding steps 1..3
+      if (curScene === "onboarding" && OB.step > 0) {
+        renderOnboarding(OB.step - 1);
+        return true;
+      }
+      // 6. Any non-home view -> pop stack and return to previous view (default home)
+      if (curScene !== "home" || this.stack.length > 1) {
+        if (this.stack.length > 1) this.stack.pop();
+        const target = this.stack[this.stack.length - 1] || { kind: "view", scene: "home" };
+        stopAudio(); micStop();
+        if (target.kind === "view" && target.scene && target.scene !== "home" && target.scene !== curScene) {
+          if (target.scene === "atlas") return renderOdysseyAtlas(true);
+          if (target.scene === "portfolio") return renderPortfolio(true);
+          if (window.navigateScene) return window.navigateScene(target.scene);
+        }
+        this.stack = [{ kind: "view", scene: "home" }];
+        renderHome();
+        return true;
+      }
+      return false;
+    }
+  };
+  window.addEventListener("popstate", () => {
+    if (NAV.canGoBack()) {
+      NAV.back();
+      try { window.history.pushState({ ody: "sentinel" }, ""); } catch (e) {}
+    } else {
+      const now = Date.now();
+      if (now - NAV.exitToastAt > 2200) {
+        NAV.exitToastAt = now;
+        toast("⬅️ Retour", "Appuyez encore pour quitter L'Odyssée", "🏠");
+        try { window.history.pushState({ ody: "sentinel" }, ""); } catch (e) {}
+      }
+    }
+  });
+
   function startSession(node, steps, mode, resumeData) {
     steps = (steps || []).filter(Boolean);
     if (!steps.length) { toast("Nothing to play here yet", "This node has no exercises. It has been skipped.", "⚠️"); if (node) { CH().done[node.id] = CH().done[node.id] || 1; persist(); } renderHome(); return; }
     stopAudio();
+    NAV.armSentinel();
     const res = resumeData && Array.isArray(resumeData.steps) && resumeData.steps.length ? resumeData : null;
     if (res) steps = res.steps.slice();
     SES = {
@@ -4765,12 +5039,17 @@
     };
     curTier = tierFor(node ? levelOfNode(node) : currentLevel());
     document.body.classList.add("ody-in-session");
+    document.body.dataset.scene = "session";
     const main = $("app-main");
     main.innerHTML = `
       <div class="ody-ses ${SES.hearts ? "is-boss" : ""} ${SES.exam ? "is-exam" : ""}" id="ody-ses">
         <div class="ody-ses-top">
-          <button class="ody-x" data-a="quit" title="Sauvegarder et revenir à la carte">✕</button>
-          <div class="ody-prog"><div class="ody-prog-fill" id="ody-prog"></div></div>
+          <button type="button" class="ody-ses-back" data-a="quit" title="Sauvegarder et revenir à la carte (Échap)">← <span>Carte</span></button>
+          <button type="button" class="ody-ses-prev" id="ody-prev-btn" data-a="prev" title="Revenir à l'étape précédente (Alt+←)" ${SES.i === 0 || SES.exam ? "disabled" : ""}>◀ <span>Préc.</span></button>
+          <div class="ody-prog-wrap">
+            <div class="ody-prog"><div class="ody-prog-fill" id="ody-prog"></div></div>
+            <span class="ody-step-num" id="ody-step-num">${SES.i + 1} / ${SES.steps.length}</span>
+          </div>
           <div class="ody-hearts" id="ody-hearts"></div>
           <div class="ody-combo" id="ody-combo"></div>
           ${relicToolbarHtml()}
@@ -4786,12 +5065,22 @@
   function updateTop() {
     if (!SES) return;
     const p = $("ody-prog"); if (p) p.style.width = `${Math.round((SES.i / SES.steps.length) * 100)}%`;
+    const sn = $("ody-step-num"); if (sn) sn.textContent = `${SES.i + 1} / ${SES.steps.length}`;
+    const pb = $("ody-prev-btn"); if (pb) pb.disabled = SES.i <= 0 || !!SES.exam;
     const maxH = (SAVE().perks && SAVE().perks.sceauSorbonne) ? 4 : 3;
     const h = $("ody-hearts"); if (h) h.innerHTML = SES.hearts == null ? "" : "❤️".repeat(Math.max(0, SES.hearts)) + `<span class="dim">${"🖤".repeat(Math.max(0, maxH - SES.hearts))}</span>`;
     const c = $("ody-combo"); if (c) c.innerHTML = SES.combo >= 3 ? `🔥 ${SES.combo}` : "";
   }
   function foot(html) { const f = $("ody-foot"); if (f) { f.className = "ody-foot"; f.innerHTML = `<div class="ody-foot-in">${html}</div>`; } }
   const btnCont = (label) => `<button class="ody-btn primary" data-a="next" id="ody-primary">${label || L("cont")} ▸</button>`;
+
+  function prev() {
+    if (!SES || SES.i <= 0 || SES.exam) return;
+    clearStepTimers();
+    stopAudio(); micStop();
+    SES.i -= 1;
+    renderStep();
+  }
 
   function renderStep() {
     if (!SES) return;
@@ -4805,11 +5094,19 @@
     SES.lastMood = "ready";
     SES.lastBubble = "";
     const R = RENDER[st.k] || RENDER.unknown;
-    stage.innerHTML = `${renderDiorama(st)}<div class="ody-card ody-k-${st.k}">${R(st)}</div>`;
+    const showDiorama = st.k !== "explore";
+    const revBanner = st._resolved ? `<div class="ody-rewind-banner">👁️ Révision de l'étape précédente (déjà validée — réécoutez l'audio ou cliquez Continuer ▸)</div>` : "";
+    stage.innerHTML = `${showDiorama ? renderDiorama(st) : ""}<div class="ody-card ody-k-${st.k}">${revBanner}${R(st)}</div>`;
     const rBar = $("ody-relics");
     if (rBar) rBar.outerHTML = relicToolbarHtml();
     stage.scrollTop = 0;
-    (AFTER[st.k] || (() => {}))(st);
+    if (st._resolved) {
+      SES.answered = true;
+      stage.querySelectorAll(".ody-choice, .ody-tile, .ody-mt, .swipe-btn, .vis-opt").forEach((b) => { b.disabled = true; });
+      feedback(!!st._resolved.ok, st._resolved.info || {});
+    } else {
+      (AFTER[st.k] || (() => {}))(st);
+    }
     // prefetch audio for the next few steps
     for (let j = SES.i + 1; j < Math.min(SES.steps.length, SES.i + 4); j++) { const n = SES.steps[j]; if (n && n.fr) prefetch(n.fr); if (n && n.npc) prefetch(n.npc); }
   }
@@ -4835,10 +5132,12 @@
     SES.answered = true;
     const st = cur(); const first = !st.retry; const ms = Date.now() - SES.stepT0;
     info.why = explainStep(st, ok, info);
+    st._resolved = { ok: !!ok, info: { title: info.title, note: info.note, answer: info.answer, why: info.why } };
+    const stepCefr = (st.card && st.card.cefr) || st.level || (SES.node ? SES.node.cefr : null);
     if (GRADABLE.has(st.k) && !info.ungraded) {
       if (first) { SES.graded += 1; if (ok) SES.right += 1; }
       if (st.sec) { const s = SES.secs[st.sec] = SES.secs[st.sec] || { n: 0, ok: 0 }; s.n += 1; if (ok) s.ok += 1; }
-      skillAdd(st.skill, ok);
+      skillAdd(st.skill, ok, stepCefr);
       const recFr = (st.card && st.card.fr) || (typeof st.a === "string" ? st.a : "") || st.fr || "";
       const recEn = (st.card && st.card.en) || st.en || st.q || "";
       if (recFr && window.recordLearningOutcome && SES.mode !== "placement") {
@@ -4873,6 +5172,7 @@
         }
       }
       SES.combo >= 3 ? SFX.combo(SES.combo) : SFX.ok();
+      if (window.RPG_VFX && window.RPG_VFX.burst) window.RPG_VFX.burst(window.innerWidth * 0.5, window.innerHeight * 0.42, isFrenzy ? "#fde047" : "#34d399", SES.combo >= 3 ? 24 : 12);
       if (window.RPG_VFX && window.RPG_VFX.floatText) window.RPG_VFX.floatText(`+${gain} XP${isFrenzy ? " ⚡×2 +10🪙" : ""}${mult > 1 && !isFrenzy ? " 🧪CRIT!" : ""}${SES.combo >= 3 ? `  🔥${SES.combo}` : ""}`, isFrenzy ? "#fde047" : "#4ade80");
     } else {
       SES.combo = 0; SFX.bad();
@@ -4932,7 +5232,7 @@
 
   // ----------------------------------------------------------------- renderers
   const camille = (sz = "") => `<img class="ody-cam ${sz}" src="${PORTRAIT}" alt="Camille">`;
-  const audioBtns = (fr, big) => `<div class="ody-audio ${big ? "big" : ""}"><button class="ody-play" data-a="play" title="Listen 1.0x (Space)">🔊</button><button class="ody-slow" data-a="slow" title="Slowly 0.7x (Shift+Space)">🐢</button><button class="ody-fast" data-a="fast" title="Vitesse Parisienne 1.25x (Alt+Space)">⚡</button></div>`;
+  const audioBtns = (fr, big) => `<div class="ody-audio ${big ? "big" : ""}"><button class="ody-play" data-a="play" title="Listen 1.0x (Space)">🔊</button><button class="ody-slow" data-a="slow" title="Slowly 0.7x (Shift+Space)">🐢</button><button class="ody-fast" data-a="fast" title="Vitesse Parisienne 1.25x (Touche F)">⚡</button></div>`;
   const RENDER = {
     unknown: () => `<p>…</p>`,
     intro(st) {
@@ -5048,11 +5348,30 @@
       </div>`;
     },
     simturn(st) {
+      const th = sceneThemeFor(SES && SES.node, SES && SES.mode, st);
+      const npcImg = st.npcImg || (th && th.npc && th.npc.img) || PORTRAIT;
+      const bgImg = (th && th.bg) || "assets/bg_cafe.jpg";
       return `<div class="ody-simturn">
-        ${st.place ? `<div class="ody-place">${esc(st.place)}</div>` : ""}
-        <div class="ody-npc"><div class="ody-npc-av">🧑</div><div class="ody-npc-bub" data-a="playnpc">${esc(st.npc)} <span class="ody-mini">🔊</span>
-          <div class="ody-npc-en">${esc(st.npc_en || "")}</div></div></div>
-        <div class="ody-k-label">🎭 Live Improv · Reply in French (speak or type) using these cues:</div>
+        <div class="bd-comic-panel" style="background-image:url('${bgImg}')">
+          <div class="bd-comic-shade"></div>
+          <div class="bd-comic-top">
+            <span class="bd-place-tag">📍 ${esc(st.place || (th && th.place) || "Paris")}</span>
+            <button type="button" class="ody-btn tiny ghost" data-a="toggleblur">🎧 ${st._blur ? "Texte masqué (Oreille pure)" : "Masquer le texte"}</button>
+          </div>
+          <div class="bd-comic-body">
+            <img src="${npcImg}" class="bd-npc-portrait" alt="Interlocuteur" onerror="this.src='${PORTRAIT}'">
+            <div class="bd-speech-bubble ${st._blur ? "is-blurred" : ""}" data-a="playnpc">
+              <div class="bd-speech-fr">${esc(st.npc)} <span class="ody-mini">🔊</span></div>
+              ${st.npc_en ? `<div class="ody-npc-en">${esc(st.npc_en)}</div>` : ""}
+              <div class="bd-speech-controls">
+                <button type="button" class="ody-btn tiny ghost" data-a="playnpc">🔊 1.0x</button>
+                <button type="button" class="ody-btn tiny ghost" data-a="slow">🐢 0.7x</button>
+                <button type="button" class="ody-btn tiny ghost" data-a="fast">⚡ 1.25x</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ody-k-label">🎭 Live Improv · Répondez en français (oral ou clavier) avec ces repères :</div>
         <div class="ody-kw" id="ody-sim-kw">${(st.keywords || []).map((k) => `<span class="ody-kwc" data-kw="${esc(k)}">${esc(k)}</span>`).join("")}</div>
         <input class="ody-input" id="ody-in" autocomplete="off" spellcheck="false" placeholder="Réponds en français…" value="${esc(st._val || "")}">
         ${accentBar("ody-in")}
@@ -5078,10 +5397,29 @@
     },
     dialogue(st) {
       const showEn = curTier === 0 || st._en;
+      const th = sceneThemeFor(SES && SES.node, SES && SES.mode, st);
+      const npcImg = st.npcImg || (th && th.npc && th.npc.img) || PORTRAIT;
+      const bgImg = (th && th.bg) || "assets/bg_cafe.jpg";
       return `<div class="ody-dlg">
-        ${st.place ? `<div class="ody-place">${esc(st.place)}</div>` : ""}
-        <div class="ody-npc"><div class="ody-npc-av">🧑</div><div class="ody-npc-bub" data-a="playnpc">${esc(st.npc)} <span class="ody-mini">🔊</span>
-          ${showEn ? `<div class="ody-npc-en">${esc(st.npc_en || "")}</div>` : `<button class="ody-link" data-a="dlgen">EN</button>`}</div></div>
+        <div class="bd-comic-panel" style="background-image:url('${bgImg}')">
+          <div class="bd-comic-shade"></div>
+          <div class="bd-comic-top">
+            <span class="bd-place-tag">📍 ${esc(st.place || (th && th.place) || "Paris")}</span>
+            <button type="button" class="ody-btn tiny ghost" data-a="toggleblur">🎧 ${st._blur ? "Afficher le texte" : "Mode Oreille Pure"}</button>
+          </div>
+          <div class="bd-comic-body">
+            <img src="${npcImg}" class="bd-npc-portrait" alt="Interlocuteur" onerror="this.src='${PORTRAIT}'">
+            <div class="bd-speech-bubble ${st._blur ? "is-blurred" : ""}" data-a="playnpc">
+              <div class="bd-speech-fr">${esc(st.npc)} <span class="ody-mini">🔊</span></div>
+              ${showEn ? `<div class="ody-npc-en">${esc(st.npc_en || "")}</div>` : `<button class="ody-link" data-a="dlgen">EN</button>`}
+              <div class="bd-speech-controls">
+                <button type="button" class="ody-btn tiny ghost" data-a="playnpc">🔊 1.0x</button>
+                <button type="button" class="ody-btn tiny ghost" data-a="slow">🐢 0.7x</button>
+                <button type="button" class="ody-btn tiny ghost" data-a="fast">⚡ 1.25x</button>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="ody-q">${L("reply")}</div>
         <div class="ody-choices col">${st.options.map((o, i) => `<button class="ody-choice" data-a="dlgpick" data-i="${i}"><span class="n">${i + 1}</span>${esc(o.fr)}</button>`).join("")}</div>
       </div>`;
@@ -5380,13 +5718,16 @@
           <button type="button" class="ody-btn tiny ghost" data-a="toggleenhelp">🇬🇧 ${showEn ? "Aide EN active ✓" : "Aide Débutant (EN)"}</button>
         </div>
         <div class="pensee-scene-box">
-          <div class="pensee-icons">${esc(st.sceneIcon || "💭🇫🇷")}</div>
+          <div class="pensee-visual-wrap">
+            <img class="pensee-scene-thumb" src="${(sceneThemeFor(SES && SES.node, SES && SES.mode, st) || {}).bg || "assets/bg_cafe.jpg"}" alt="Scène mentale" onerror="this.style.display='none'">
+            <div class="pensee-icons">${esc(st.sceneIcon || "💭🇫🇷")}</div>
+          </div>
           <div class="pensee-clues">
             <div class="pensee-clues-lbl">🔍 Indices Mentaux 100% Français (Cliquez pour écouter 🔊) :</div>
             <div class="pensee-clues-pills">
               ${(st.indicesFr || []).map((cl) => `<span class="pensee-clue-pill" data-a="say" data-t="${esc(cl)}">💭 ${esc(cl)} 🔊</span>`).join("")}
             </div>
-            ${st.mentalImageEn ? `<div class="pensee-img-en">🎬 ${esc(st.mentalImageEn)}</div>` : ""}
+            ${showEn && st.mentalImageEn ? `<div class="pensee-img-en">🎬 ${esc(st.mentalImageEn)}</div>` : ""}
           </div>
         </div>
         <div class="ody-q" style="margin-top:.55rem">${esc(st.promptFr)}${showEn ? `<div class="ody-sub-en" style="margin-top:.2rem">🇬🇧 Direct-Thought Goal: Express this mental image directly in natural French (avoid the word-for-word English translation trap!):</div>` : ""}</div>
@@ -5424,6 +5765,78 @@
         <div class="ody-sf-timer" id="ody-sf-timer"></div>
         <div class="ody-sf-live" id="ody-sf-live"></div>
         <div id="ody-grade"></div>
+      </div>`;
+    },
+    explore(st) {
+      st._seen = st._seen || {};
+      st._phase = st._phase || "discover";
+      st._huntIdx = st._huntIdx || 0;
+      const hs = st.hotspots || [];
+      const seenCount = Object.keys(st._seen).length;
+      const hunts = st.hunts || [];
+      const curHuntId = hunts[st._huntIdx];
+      const curHunt = hs.find((h) => h.id === curHuntId);
+      const isHunt = st._phase === "hunt" && !!curHunt;
+      const pinsHtml = hs.map((h) => {
+        const isSeen = !!st._seen[h.id];
+        return `<button type="button" class="hs-pin ${isSeen ? "seen" : ""} ${isHunt ? "hunt-mode" : ""}" style="left:${h.x}%;top:${h.y}%" data-a="taphotspot" data-hid="${esc(h.id)}" title="${isHunt ? "Toucher l'objet" : esc(h.fr)}">
+          <span class="hs-dot">${h.icon || "✨"}</span>
+          ${!isHunt && isSeen ? `<span class="hs-lbl">${esc(h.fr)}</span>` : ""}
+        </button>`;
+      }).join("");
+      return `<div class="ody-explore-card">
+        <div class="exp-top">
+          <div class="exp-npc">
+            <img src="${st.npc || PORTRAIT}" class="exp-npc-img" alt="${esc(st.npcName || "Parisien")}" onerror="this.src='${PORTRAIT}'">
+            <div>
+              <div class="ody-k-label">🗺️ REGARDER &amp; TOUCHER (${esc(st.level || "A1")}) · ${esc(st.place || "")} · ZÉRO ANGLAIS</div>
+              <h3>${esc(st.title)}</h3>
+            </div>
+          </div>
+          <div class="exp-phase-pill">${isHunt ? `🎯 Chasse Audio ${st._huntIdx + 1}/${hunts.length}` : `🔍 Découverte ${seenCount}/${hs.length}`}</div>
+        </div>
+        ${isHunt ? `<div class="exp-hunt-bar">
+          <button type="button" class="ody-btn primary small" data-a="hearhunt">🔊 Écouter la demande</button>
+          <button type="button" class="ody-btn ghost small" data-a="hearhunt" data-r="0.7">🐢 0.7x</button>
+          <button type="button" class="ody-btn ghost small" data-a="hearhunt" data-r="1.25">⚡ 1.25x</button>
+          <span class="exp-hunt-cue">🎧 Touchez directement dans l'image ce que le Parisien demande !</span>
+        </div>` : `<div class="exp-intro-bar">
+          <span>👆 Touchez les objets directement dans la scène pour les entendre en français (${seenCount}/${hs.length} découverts)</span>
+          <button type="button" class="ody-btn primary small" data-a="starthunt" id="exp-start-hunt">🎯 Lancer la Chasse Audio ▸</button>
+        </div>`}
+        <div class="exp-canvas-wrap" id="exp-canvas-wrap">
+          <img src="${st.bg}" class="exp-bg-img" alt="${esc(st.title)}">
+          <div class="exp-pin-layer">${pinsHtml}</div>
+        </div>
+        <div class="exp-callout" id="exp-callout">${st._lastCallout || `💬 ${esc(st.introFr || "Touchez un point lumineux dans l'image !")}`}</div>
+      </div>`;
+    },
+    visreflex(st) {
+      const opts = st.options || [];
+      return `<div class="ody-visreflex-card">
+        <div class="ody-k-label">👁️ VOIR &amp; ENTENDRE (${esc(st.level || "A1")}) · ZÉRO TRADUCTION</div>
+        <div class="ody-q">🎧 Écoutez le Parisien et touchez la scène correspondante !</div>
+        <div class="ody-listen-hero">${audioBtns(st.fr, true)}</div>
+        <div class="vis-grid">
+          ${opts.map((o, i) => `<button type="button" class="vis-opt" data-a="vispick" data-i="${i}">
+            <img src="${o.bg}" alt="${esc(o.labelFr)}" class="vis-opt-img">
+            <span class="vis-opt-cap"><span class="n">${i + 1}</span> ${esc(o.labelFr)}</span>
+          </button>`).join("")}
+        </div>
+      </div>`;
+    },
+    swipe(st) {
+      return `<div class="ody-swipe-card" id="ody-swipe-card">
+        <div class="ody-k-label">${esc(st.deckTitle || "⚡ Arcade Swipe Réflexe")} · Niveau ${esc(st.level || "A1")}</div>
+        <div class="swipe-lanes">
+          <button type="button" class="swipe-btn left" data-a="swipepick" data-side="left">${esc(st.leftLabel || "⬅️ Gauche")}</button>
+          <button type="button" class="swipe-btn right" data-a="swipepick" data-side="right">${esc(st.rightLabel || "Droite ➡️")}</button>
+        </div>
+        <div class="swipe-stage" id="ody-swipe-stage">
+          <div class="swipe-pill-sub">${esc(st.sub || "Glissez la carte ou tapez ⬅️ / ➡️")}</div>
+          <div class="swipe-prompt">${esc(st.prompt)}</div>
+          <div class="swipe-hint">👆 Glissez à gauche/droite sur tablette · Clavier : ⬅️ ou ➡️</div>
+        </div>
       </div>`;
     }
   };
@@ -5548,6 +5961,41 @@
         ta.addEventListener("input", () => syncSf(false));
         syncSf(true);
       }
+    },
+    explore(st) {
+      foot(`<span class="ody-foot-hint">🗺️ Touchez les objets directement dans la scène · Zéro anglais</span>`);
+      if (st._phase === "hunt") {
+        const curH = (st.hotspots || []).find((h) => h.id === (st.hunts || [])[st._huntIdx || 0]);
+        if (curH) STEP_TIMERS.tos.push(setTimeout(() => speak(curH.huntFr || curH.spokenFr), 220));
+      } else if (CH().autoAudio && st.introFr) {
+        STEP_TIMERS.tos.push(setTimeout(() => speak(st.introFr), 220));
+      }
+    },
+    visreflex(st) {
+      foot(`<span class="ody-foot-hint">👁️ Écoutez puis touchez la bonne image (1–4)</span>`);
+      STEP_TIMERS.tos.push(setTimeout(() => speak(st.fr), 220));
+    },
+    swipe(st) {
+      foot(`<span class="ody-foot-hint">⚡ Touches ⬅️ / ➡️ ou glissez la carte sur Redmi Pad</span>`);
+      const card = $("ody-swipe-stage");
+      if (card) {
+        let sx = 0, active = false;
+        card.addEventListener("pointerdown", (e) => { sx = e.clientX; active = true; card.setPointerCapture && card.setPointerCapture(e.pointerId); });
+        card.addEventListener("pointermove", (e) => {
+          if (!active || SES.answered) return;
+          const dx = e.clientX - sx;
+          card.style.transform = `translateX(${clamp(dx, -110, 110)}px) rotate(${clamp(dx / 18, -8, 8)}deg)`;
+        });
+        const end = (e) => {
+          if (!active) return;
+          active = false;
+          const dx = e.clientX - sx;
+          card.style.transform = "";
+          if (!SES.answered && Math.abs(dx) > 48) ACT.swipepick({ dataset: { side: dx < 0 ? "left" : "right" } });
+        };
+        card.addEventListener("pointerup", end);
+        card.addEventListener("pointercancel", () => { active = false; card.style.transform = ""; });
+      }
     }
   };
   function bindInputSave(st) {
@@ -5576,6 +6024,97 @@
     play() { const st = cur(); if (st) speak(st.fr || st.npc, 1); },
     slow() { const st = cur(); if (st) speak(st.fr || st.npc, 0.7); },
     fast() { const st = cur(); if (st) speak(st.fr || st.npc, 1.25); },
+    prev() { prev(); },
+    toggleblur() { const st = cur(); if (!st) return; st._blur = !st._blur; renderStep(); },
+    taphotspot(el) {
+      const st = cur(); if (!st || st.k !== "explore" || SES.answered) return;
+      const hid = el.dataset.hid;
+      const h = (st.hotspots || []).find((x) => x.id === hid);
+      if (!h) return;
+      st._seen = st._seen || {};
+      if (st._phase !== "hunt") {
+        st._seen[h.id] = true;
+        st._lastCallout = `${h.icon || "✨"} <b>${esc(h.fr)}</b> — « ${esc(h.spokenFr)} » <button type="button" class="ody-btn tiny ghost" data-a="say" data-t="${esc(h.spokenFr)}">🔊</button>`;
+        speak(h.spokenFr || h.fr);
+        SFX.tap();
+        if (window.RPG_VFX && window.RPG_VFX.burst) {
+          const rect = el.getBoundingClientRect();
+          window.RPG_VFX.burst(rect.left + rect.width / 2, rect.top + rect.height / 2, "#fde047", 14);
+        }
+        renderStep();
+        return;
+      }
+      const targetId = (st.hunts || [])[st._huntIdx || 0];
+      const ok = h.id === targetId;
+      if (ok) {
+        SFX.ok();
+        speak(h.fr);
+        if (window.RPG_VFX && window.RPG_VFX.burst) {
+          const rect = el.getBoundingClientRect();
+          window.RPG_VFX.burst(rect.left + rect.width / 2, rect.top + rect.height / 2, "#34d399", 20);
+        }
+        st._huntIdx = (st._huntIdx || 0) + 1;
+        if (st._huntIdx >= (st.hunts || []).length) {
+          st._lastCallout = `✅ Bravo ! Scène « ${esc(st.title)} » explorée et maîtrisée à l'oreille !`;
+          resolve(true, { title: "🗺️ Scène Parisienne Maîtrisée !", answer: h.spokenFr, why: `Vous avez identifié « ${h.fr} » directement en français sans aucune traduction anglaise !` });
+        } else {
+          st._lastCallout = `✅ Exact ! « ${esc(h.fr)} » — écoutez la demande suivante !`;
+          renderStep();
+        }
+      } else {
+        SFX.bad();
+        st._lastCallout = `🧭 C'était « ${esc(h.fr)} » — réécoutez la demande et touchez le bon objet !`;
+        const cOut = $("exp-callout");
+        if (cOut) cOut.innerHTML = st._lastCallout;
+        const targetH = (st.hotspots || []).find((x) => x.id === targetId);
+        if (targetH) speak(targetH.huntFr || targetH.spokenFr, 0.85);
+      }
+    },
+    starthunt() {
+      const st = cur(); if (!st || st.k !== "explore") return;
+      st._phase = "hunt"; st._huntIdx = 0;
+      st._lastCallout = "🎧 Chasse Audio lancée : écoutez et touchez le bon objet dans l'image !";
+      renderStep();
+    },
+    hearhunt(el) {
+      const st = cur(); if (!st || st.k !== "explore") return;
+      const targetId = (st.hunts || [])[st._huntIdx || 0];
+      const h = (st.hotspots || []).find((x) => x.id === targetId);
+      if (h) speak(h.huntFr || h.spokenFr, +(el && el.dataset && el.dataset.r || 1));
+    },
+    vispick(el) {
+      const st = cur(); if (!st || SES.answered) return;
+      const i = +el.dataset.i;
+      const chosen = (st.options || [])[i];
+      if (!chosen) return;
+      document.querySelectorAll(".vis-opt").forEach((b, j) => {
+        b.disabled = true;
+        if (st.options[j] && st.options[j].ok) b.classList.add("right");
+      });
+      if (!chosen.ok) el.classList.add("wrong");
+      speak(st.fr);
+      resolve(!!chosen.ok, {
+        title: chosen.ok ? "👁️ Connexion Visuelle & Audio Parfaite !" : "🧭 Associons la scène à la phrase :",
+        answer: st.fr,
+        why: `Scène correspondante : ${st.answer}`
+      });
+    },
+    swipepick(el) {
+      const st = cur(); if (!st || SES.answered) return;
+      const picked = el.dataset.side;
+      const ok = picked === st.side;
+      document.querySelectorAll(".swipe-btn").forEach((b) => {
+        b.disabled = true;
+        if (b.dataset.side === st.side) b.classList.add("right");
+        else if (b.dataset.side === picked && !ok) b.classList.add("wrong");
+      });
+      if (st.fr) speak(st.fr);
+      resolve(ok, {
+        title: ok ? "⚡ Réflexe Éclair !" : "🧭 Voici le bon réflexe :",
+        answer: st.answer,
+        why: st.why || ""
+      });
+    },
     playnpc() { const st = cur(); if (st) speak(st.npc); },
     stopaudio() { stopAudio(); },
     readall() { const st = cur(); if (st) speak(st.text); },
@@ -6349,22 +6888,43 @@
     ACT.sfretry = () => { st._graded = false; SES.answered = false; renderStep(); };
   }
   function analyzeRhetoricLocal(text, st) {
+    const lvRk = cefrRank((st && st.level) || currentLevel());
     const rub = C2_RUBRIC();
-    const metrics = Array.isArray(rub.metrics) ? rub.metrics : [];
-    const hitMetrics = [];
     const lowText = String(text || "").toLowerCase();
-    metrics.forEach((m) => {
-      try {
-        if (Array.isArray(m.markers) && m.markers.length) {
-          const hits = m.markers.filter((mk) => mk && lowText.includes(String(mk).toLowerCase()));
-          if (hits.length) hitMetrics.push({ label: m.name || m.label || m.id, count: hits.length, tip: m.upgradeTip || m.tip || "" });
-        } else if (m.regex) {
-          const re = m.regex instanceof RegExp ? m.regex : new RegExp(m.regex, "gi");
-          const matches = text.match(re);
-          if (matches && matches.length) hitMetrics.push({ label: m.name || m.label || m.id, count: matches.length, tip: m.upgradeTip || m.tip || "" });
-        }
-      } catch (e) {}
-    });
+    const hitMetrics = [];
+    if (lvRk <= 2) {
+      const tieredChecks = lvRk === 0 ? [
+        { label: "Salutation & Politesse A1", re: /\b(bonjour|salut|bonsoir|merci|s'il vous plaît|s'il te plaît|à bientôt)\b/gi },
+        { label: "Connecteurs simples (et / mais / parce que)", re: /\b(et|mais|parce que|aussi|avec)\b/gi },
+        { label: "Accents français soignés", re: /[éèêàùçîô]/gi }
+      ] : lvRk === 1 ? [
+        { label: "Récit au Passé (Passé Composé / Imparfait)", re: /\b(j'ai|je suis|nous avons|il faisait|c'était|était|étaient)\b/gi },
+        { label: "Marqueurs de temps A2", re: /\b(hier|samedi|dimanche|ensuite|puis|d'abord|enfin|demain)\b/gi },
+        { label: "Politesse & Conditionnel A2", re: /\b(voudrais|serait-il|merci|cordialement|désolé)\b/gi }
+      ] : [
+        { label: "Connecteurs d'opinion B1", re: /\b(cependant|pourtant|en revanche|d'une part|par conséquent|à mon avis|donc)\b/gi },
+        { label: "Pronoms & fluidité B1", re: /\b(j'y|j'en|m'y|nous en|qui|que|dont)\b/gi },
+        { label: "Nuance & structure", re: /\b(bien que|malgré|toutefois|en conclusion|afin de)\b/gi }
+      ];
+      tieredChecks.forEach((chk) => {
+        const m = text.match(chk.re);
+        if (m && m.length) hitMetrics.push({ label: chk.label, count: m.length, tip: "" });
+      });
+    } else {
+      const metrics = Array.isArray(rub.metrics) ? rub.metrics : [];
+      metrics.forEach((m) => {
+        try {
+          if (Array.isArray(m.markers) && m.markers.length) {
+            const hits = m.markers.filter((mk) => mk && lowText.includes(String(mk).toLowerCase()));
+            if (hits.length) hitMetrics.push({ label: m.name || m.label || m.id, count: hits.length, tip: m.upgradeTip || m.tip || "" });
+          } else if (m.regex) {
+            const re = m.regex instanceof RegExp ? m.regex : new RegExp(m.regex, "gi");
+            const matches = text.match(re);
+            if (matches && matches.length) hitMetrics.push({ label: m.name || m.label || m.id, count: matches.length, tip: m.upgradeTip || m.tip || "" });
+          }
+        } catch (e) {}
+      });
+    }
     const musts = st.must_use || st.checklist || [];
     const metMusts = musts.map((c) => {
       const frBitsInC = (c.match(/«([^»]+)»/g) || []).map((x) => x.replace(/[«»]/g, ""));
@@ -6372,7 +6932,9 @@
       const met = frBitsInC.length ? frBitsInC.some((b) => normLoose(text).includes(normLoose(b))) : (rawKey ? normLoose(text).includes(normLoose(rawKey)) : words(text).length >= (st.minWords || 20));
       return { criterion: c, met };
     });
-    const upgrades = (rub.registerUpgrades || []).slice(0, 4).map((u) => ({ plain: u.basic || u.casual || "", native: u.c2Upgrade || u.c2 || "", why: u.note || "" }));
+    const upgrades = lvRk <= 1
+      ? [{ plain: "Je veux…", native: "Je voudrais…", why: "Plus poli et 100% naturel en France (A1–A2)." }, { plain: "C'est très bien", native: "C'est super / génial !", why: "Plus vivant au quotidien." }]
+      : (rub.registerUpgrades || []).slice(0, 4).map((u) => ({ plain: u.basic || u.casual || "", native: u.c2Upgrade || u.c2 || "", why: u.note || "" }));
     return { hitMetrics, metMusts, upgrades };
   }
 
@@ -6695,6 +7257,37 @@
     </div>`;
   }
 
+  function levelMasteryBarHtml(lv) {
+    if (!CEFR.includes(lv)) return "";
+    const c = CH();
+    const lsk = (c.levelSkills && c.levelSkills[lv]) || {};
+    const pillars = [
+      { k: "pronunciation", ic: "👄", lbl: "Sons", act: "scene", sc: "soundlab" },
+      { k: "listening", ic: "🎧", lbl: "Écoute", act: "pillarrep", p: "listen" },
+      { k: "speaking", ic: "🎙️", lbl: "Oral", act: "pillarrep", p: "speak" },
+      { k: "reading", ic: "📖", lbl: "Lecture", act: "pillarrep", p: "read" },
+      { k: "writing", ic: "✍️", lbl: "Écrit/Gram.", act: "pillarrep", p: "write" }
+    ];
+    let weakest = pillars[0], lowVal = 101;
+    const bars = pillars.map((pl) => {
+      const x = lsk[pl.k] || (pl.k === "writing" ? lsk.grammar : null);
+      const pct = x && x.n ? Math.round((typeof x.ema === "number" ? x.ema : x.ok / x.n) * 100) : 0;
+      if (pct < lowVal) { lowVal = pct; weakest = pl; }
+      return `<button type="button" class="lm-pill" data-a2="${pl.act}" ${pl.sc ? `data-s="${pl.sc}"` : `data-p="${pl.p}" data-lv="${lv}"`} title="Renforcer ${pl.lbl} au niveau ${lv} (${pct}%)">
+        <span>${pl.ic} ${pl.lbl}</span>
+        <i><b style="width:${Math.max(4, pct)}%"></b></i>
+        <small>${pct}%</small>
+      </button>`;
+    }).join("");
+    return `<div class="ody-level-mastery" data-lv="${lv}">
+      <div class="lm-head">
+        <span>⚖️ <b>Maîtrise Complète ${lv}</b> · 5 Compétences</span>
+        <button type="button" class="ody-btn tiny ghost" data-a2="${weakest.act}" ${weakest.sc ? `data-s="${weakest.sc}"` : `data-p="${weakest.p}" data-lv="${lv}"`}>🎯 Renforcer ${weakest.lbl} (${lv})</button>
+      </div>
+      <div class="lm-grid">${bars}</div>
+    </div>`;
+  }
+
   function levelHtml(lv, nx) {
     const c = CH();
     const ns = levelNodes(lv); if (!ns.length) return "";
@@ -6730,6 +7323,7 @@
         ${!(gate && gate.passed) && EXAMS()[lv] ? `<button class="ody-skip" data-a2="skip" data-lv="${prevLevel(lv)}">🧭 Passer l'examen ${prevLevel(lv)} pour valider d'un coup</button>` : ""}
         <button class="ody-skip unlock-bridge-btn" data-a2="unlocklvl" data-lv="${lv}">🔓 Débloquer le niveau ${lv} immédiatement (Zéro Blocage)</button>
       </div>` : ""}
+      ${isOpen ? levelMasteryBarHtml(lv) : ""}
       ${isOpen ? levelSynergyBarHtml(lv) : ""}
       ${isOpen ? `<div class="ody-units">${units.map((u) => unitHtml(u, nx)).join("")}</div>` : ""}
     </section>`;
@@ -6804,10 +7398,12 @@
       <button class="ody-btn small ghost" style="width:100%;margin-top:.5rem" data-a2="atlas">🧭 Ouvrir l'Atlas de Maîtrise C2</button>
     </div>`;
   }
-  function renderOdysseyAtlas() {
+  function renderOdysseyAtlas(fromBack) {
     closeDrawer(); closeSheet(); SES = null; stopAudio(); micStop();
     document.body.classList.remove("ody-in-session");
-    document.body.dataset.scene = "home";
+    document.body.dataset.scene = "atlas";
+    if (!fromBack) NAV.push({ kind: "view", scene: "atlas" });
+    updateBar();
     const main = $("app-main"); if (!main) return;
     const c = CH(); const p = odysseyAtlasSummary();
     const phasesHtml = MASTERY_EPOCHS.map((ph) => {
@@ -7054,6 +7650,7 @@
     const cardsHtml = eps.map((ep) => {
       const isDone = !!done[ep.id];
       return `<button type="button" class="chr-card ${isDone ? "done" : ""}" data-a2="playchronique" data-ep="${esc(ep.id)}" title="${esc(en ? ep.subEn : ep.subFr)}">
+        ${ep.coverImg ? `<div class="chr-thumb" style="background-image:url('${ep.coverImg}')"></div>` : ""}
         <div class="chr-top">
           <span class="chr-cefr">${esc(ep.cefr)}</span>
           <span class="chr-ic">${ep.icon}</span>
@@ -7073,6 +7670,85 @@
       </div>
       <div class="chr-grid">${cardsHtml}</div>
     </section>`;
+  }
+
+  let STUDIO_LV = null;
+  function levelStudioDeckHtml() {
+    const curLv = currentLevel() === "NATIF" ? "C2" : currentLevel();
+    const lv = CEFR.includes(STUDIO_LV) ? STUDIO_LV : curLv;
+    const en = isEnGuide();
+    const pills = CEFR.map((x) => `<button type="button" class="lsd-pill ${x === lv ? "active" : ""}" data-a2="studiolevel" data-lv="${x}">${x}</button>`).join("");
+    const levelExtras = {
+      A1: [
+        { ic: "👄", t: "Labo des Sons (A1)", sub: "18 sons, paires minimales & bouche", act: "scene", sc: "soundlab" },
+        { ic: "🥖", t: "Quartier Boulangerie (A1)", sub: "Commander & politesse parisienne", act: "alldistricts" }
+      ],
+      A2: [
+        { ic: "⏳", t: "Passé Composé vs Imparfait", sub: "Forge des temps & récits A2", act: "sleuthrun" },
+        { ic: "🏠", t: "Coloc & Pharmacie (A2)", sub: "Scènes visuelles du quotidien", act: "explore", sid: "coloc_10e" }
+      ],
+      B1: [
+        { ic: "🔀", t: "Pronoms Y/EN & Métro (B1)", sub: "Réflexes de conversation B1", act: "explore", sid: "metro_chatelet" },
+        { ic: "📻", t: "Radio & Vitesse Réelle (B1)", sub: "Comprendre les Français vite", act: "scene", sc: "gym" }
+      ],
+      B2: [
+        { ic: "⚖️", t: "Subjonctif & Débat Odéon (B2)", sub: "Nuance, concession & cinéma", act: "perioderun" },
+        { ic: "🕯️", t: "Dîner du Marais (B2)", sub: "Codes de table & ironie", act: "explore", sid: "diner_marais" }
+      ],
+      C1: [
+        { ic: "🏛️", t: "Banque & Comex (C1)", sub: "3 registres & synthèse exécutive", act: "explore", sid: "prefecture_banque" },
+        { ic: "⚖️", t: "Joute Oratoire (C1)", sub: "Concession · Réfutation · Synthèse", act: "jouterun" }
+      ],
+      C2: [
+        { ic: "✨", t: "Pont des Arts Minuit (C2)", sub: "Éloquence, litotes & Académie", act: "explore", sid: "pont_des_arts" },
+        { ic: "🏛️", t: "Panthéon & Période (C2)", sub: "18 Sceaux & Architecture C2", act: "pantheon" }
+      ]
+    }[lv] || [];
+    const cards = [
+      { ic: "🗺️", t: `Explorer Paris (${lv})`, sub: en ? "Tap objects in illustrated scenes · 0 English" : "Touchez les objets dans l'image · 0 anglais", act: "openexplorepicker", cls: "is-visual" },
+      { ic: "⚡", t: `Arcade Swipe (${lv})`, sub: en ? "Fast Left/Right touch & keyboard reflexes" : "Glissez ⬅️/➡️ · Réflexes éclairs", act: "swipe", lv, cls: "is-swipe" },
+      { ic: "👁️", t: `Voir & Entendre (${lv})`, sub: en ? "Hear French → Tap the right Paris scene" : "Écoutez → Touchez la bonne scène", act: "visreflex", lv, cls: "is-vis" },
+      ...levelExtras
+    ];
+    return `<section class="ody-level-studio-deck" id="ody-level-studio-deck" aria-label="Ateliers Visuels & Interactifs par Niveau">
+      <div class="lsd-head">
+        <div>
+          <span class="lsd-badge">🎨 ${en ? "VISUAL & INTERACTIVE · NO WALLS OF TEXT" : "VISUEL & INTERACTIF · ZÉRO LECTURE PASSIVE"}</span>
+          <h3>${en ? `Master Level ${lv} Thoroughly` : `Maîtriser le Niveau ${lv} à Fond`}</h3>
+        </div>
+        <div class="lsd-pills" role="tablist">${pills}</div>
+      </div>
+      <div class="lsd-grid">
+        ${cards.map((k) => `<button type="button" class="lsd-card ${k.cls || ""}" data-a2="${k.act}" ${k.lv ? `data-lv="${k.lv}"` : ""} ${k.sid ? `data-sid="${k.sid}"` : ""} ${k.sc ? `data-s="${k.sc}"` : ""}>
+          <span class="lsd-ic">${k.ic}</span>
+          <span><b>${esc(k.t)}</b><small>${esc(k.sub)}</small></span>
+        </button>`).join("")}
+      </div>
+    </section>`;
+  }
+
+  function openExplorePickerSheet() {
+    closeSheet(); closeDrawer();
+    const scenes = Array.isArray(window.VISUAL_SCENES) ? window.VISUAL_SCENES : [];
+    const d = document.createElement("div"); d.className = "ody-sheet-wrap"; d.id = "ody-sheet";
+    d.innerHTML = `<div class="ody-sheet wide-sheet">
+      <div class="ody-row between">
+        <div>
+          <div class="ody-kind">🗺️ REGARDER &amp; TOUCHER · 10 SCÈNES VISUELLES DE PARIS (A1 → C2)</div>
+          <h3>Apprenez par l'Image et l'Oreille — Zéro Traduction Anglaise</h3>
+          <div class="ody-mini">Choisissez un lieu de Paris, touchez les objets directement dans l'illustration, puis relevez la Chasse Audio !</div>
+        </div>
+        <button class="ody-btn ghost small" data-a2="closesheet">✕ Fermer</button>
+      </div>
+      <div class="exp-picker-grid">
+        ${scenes.map((sc) => `<button type="button" class="exp-pick-card" data-a2="explore" data-sid="${esc(sc.id)}">
+          <div class="epc-img" style="background-image:url('${sc.bg}')"><span class="chr-cefr">${esc(sc.cefr)}</span></div>
+          <div class="epc-body"><b>${esc(sc.title)}</b><small>${esc(sc.place)} · ${(sc.hotspots || []).length} objets</small></div>
+        </button>`).join("")}
+      </div>
+    </div>`;
+    document.body.appendChild(d);
+    d.addEventListener("click", (e) => { if (e.target === d) closeSheet(); });
   }
 
   function openChroniquesSheet() {
@@ -7177,6 +7853,7 @@
     SES = null; stopAudio(); micStop();
     document.body.classList.remove("ody-in-session");
     document.body.dataset.scene = "home";
+    NAV.stack = [{ kind: "view", scene: "home" }];
     const main = $("app-main"); if (!main) return;
     const c = CH();
     if (!c.onboarded) return renderOnboarding(0);
@@ -7235,6 +7912,7 @@
           </div>
         </section>
         ${parisDispatchHtml(activeNode, mpActive)}
+        ${levelStudioDeckHtml()}
         ${chroniquesStripHtml()}
         ${quatuorAndPathBarHtml()}
         ${parisMapStripHtml()}
@@ -7470,7 +8148,13 @@
     { id: "seal_sorbonne", icon: "⚖️", title: "⚖️ Orateur de la Sorbonne", desc: "Triompher dans la Joute Oratoire Contradictoire ou rédiger un texte.", rewardGold: 140, rewardRep: 40, goAction: "jouterun", check: (c, s) => (c.portfolio && c.portfolio.length >= 1) || Object.keys(s.completedWritings || {}).length >= 1 || (c.reputation || 0) >= 100 },
     { id: "seal_periode", icon: "✒️", title: "✒️ Architecte de la Période", desc: "Maîtriser l'architecture syntaxique et la concordance des modes.", rewardGold: 150, rewardRep: 45, goAction: "perioderun", check: (c) => ((c.skills && c.skills.writing && c.skills.writing.n) || 0) >= 2 || (c.reputation || 0) >= 120 },
     { id: "seal_dignitaire", icon: "⚜️", title: "⚜️ Grand Dignitaire de Paris", desc: "Élever sa Réputation Parisienne au-delà de 150 ⚜️ ou valider un examen.", rewardGold: 200, rewardRep: 50, goAction: "alldistricts", check: (c) => (c.reputation || 0) >= 150 || Object.values(c.gates || {}).some((g) => g && g.passed) },
-    { id: "seal_immortel", icon: "👑", title: "👑 Immortel sous la Coupole", desc: "Atteindre le sommet C2 / Natif ou 300 ⚜️ de Réputation à l'Académie.", rewardGold: 350, rewardRep: 100, goAction: "atlas", check: (c) => !!(c.natif || (c.gates && c.gates.C2 && c.gates.C2.passed) || (c.reputation || 0) >= 300) }
+    { id: "seal_immortel", icon: "👑", title: "👑 Immortel sous la Coupole", desc: "Atteindre le sommet C2 / Natif ou 300 ⚜️ de Réputation à l'Académie.", rewardGold: 350, rewardRep: 100, goAction: "atlas", check: (c) => !!(c.natif || (c.gates && c.gates.C2 && c.gates.C2.passed) || (c.reputation || 0) >= 300) },
+    { id: "seal_lv_a1", icon: "🌱", title: "🌱 Sceau Maîtrise A1 (Fondations)", desc: "Compléter au moins 5 étapes A1 ou réussir l'examen A1.", rewardGold: 80, rewardRep: 20, goAction: "home", check: (c) => !!(c.gates && c.gates.A1 && c.gates.A1.passed) || levelNodes("A1").filter((n) => nodeStars(n)).length >= 5 },
+    { id: "seal_lv_a2", icon: "🥖", title: "🥖 Sceau Maîtrise A2 (Quotidien)", desc: "Compléter au moins 5 étapes A2 ou réussir l'examen A2.", rewardGold: 100, rewardRep: 25, goAction: "home", check: (c) => !!(c.gates && c.gates.A2 && c.gates.A2.passed) || levelNodes("A2").filter((n) => nodeStars(n)).length >= 5 },
+    { id: "seal_lv_b1", icon: "🚇", title: "🚇 Sceau Maîtrise B1 (Autonomie)", desc: "Compléter au moins 5 étapes B1 ou réussir l'examen B1.", rewardGold: 120, rewardRep: 30, goAction: "home", check: (c) => !!(c.gates && c.gates.B1 && c.gates.B1.passed) || levelNodes("B1").filter((n) => nodeStars(n)).length >= 5 },
+    { id: "seal_lv_b2", icon: "🎨", title: "🎨 Sceau Maîtrise B2 (Débat & Nuance)", desc: "Compléter au moins 5 étapes B2 ou réussir l'examen B2.", rewardGold: 150, rewardRep: 35, goAction: "home", check: (c) => !!(c.gates && c.gates.B2 && c.gates.B2.passed) || levelNodes("B2").filter((n) => nodeStars(n)).length >= 5 },
+    { id: "seal_lv_c1", icon: "🏢", title: "🏢 Sceau Maîtrise C1 (Stratège)", desc: "Compléter au moins 5 étapes C1 ou réussir l'examen C1.", rewardGold: 200, rewardRep: 45, goAction: "home", check: (c) => !!(c.gates && c.gates.C1 && c.gates.C1.passed) || levelNodes("C1").filter((n) => nodeStars(n)).length >= 5 },
+    { id: "seal_lv_c2", icon: "🏛️", title: "🏛️ Sceau Maîtrise C2 (Académicien)", desc: "Compléter au moins 5 étapes C2 ou réussir l'examen C2.", rewardGold: 300, rewardRep: 80, goAction: "home", check: (c) => !!(c.gates && c.gates.C2 && c.gates.C2.passed) || levelNodes("C2").filter((n) => nodeStars(n)).length >= 5 }
   ];
   function openPantheonSheet() {
     closeSheet();
@@ -7758,6 +8442,32 @@
   }
   const HOME_ACT = {
     go(el) { go(el.dataset.id); },
+    back() { NAV.back(); },
+    openexplorepicker() { openExplorePickerSheet(); },
+    explore(el) {
+      const sid = (el && el.dataset && (el.dataset.sid || el.dataset.lv)) || "boulangerie";
+      closeSheet(); closeDrawer();
+      const steps = buildExploreSession(sid);
+      if (!steps.length) return toast("Scènes visuelles indisponibles", "", "🗺️");
+      startSession(null, steps, "explore_" + sid);
+    },
+    swipe(el) {
+      const lv = (el && el.dataset && el.dataset.lv) || STUDIO_LV || (currentLevel() === "NATIF" ? "C2" : currentLevel());
+      closeSheet(); closeDrawer();
+      const steps = buildSwipeSession(lv);
+      if (!steps.length) return toast("Arcade Swipe indisponible", "", "⚡");
+      startSession(null, steps, "swipe_" + lv);
+    },
+    visreflex(el) {
+      const lv = (el && el.dataset && el.dataset.lv) || STUDIO_LV || (currentLevel() === "NATIF" ? "C2" : currentLevel());
+      closeSheet(); closeDrawer();
+      const steps = [{ k: "intro", title: `👁️ Voir & Entendre (${lv})`, place: "🎧 Zéro Traduction · Audio + Image", goal: "Écoutez le Parisien sans texte et touchez la scène correspondante !" }].concat(buildVisReflexSteps(lv, 4));
+      startSession(null, steps, "visreflex_" + lv);
+    },
+    studiolevel(el) {
+      const lv = el && el.dataset && el.dataset.lv;
+      if (CEFR.includes(lv)) { STUDIO_LV = lv; HOME.open[lv] = true; renderHome(); }
+    },
     chroniques() { openChroniquesSheet(); },
     playchronique(el) {
       const epId = (el && el.dataset && el.dataset.ep) || "ep1_flore";
@@ -8162,19 +8872,17 @@
     const s = SAVE(), c = CH(); const daily = c.daily.date === today() ? c.daily : { xp: 0 };
     const rv = reviewCards().length;
     const lvl = currentLevel();
+    const curScene = document.body.dataset.scene || "home";
     bar.innerHTML = `
-      <button class="ob-home" data-a2="home" title="Your path"><img src="assets/odyssee_icon.png?v=26.0" class="ob-pixel-icon" alt=""> <span>L'Odyssée</span></button>
+      ${curScene !== "home" ? `<button type="button" class="ob-back" data-a2="back" title="Retour (Échap / Alt+←)">← Retour</button>` : ""}
+      <button class="ob-home" data-a2="home" title="Your path"><img src="assets/odyssee_icon.png?v=27.0" class="ob-pixel-icon" alt=""> <span>L'Odyssée</span></button>
       <span class="ob-lvl" title="Current level">${lvl === "NATIF" ? "👑" : lvl}</span>
+      <button class="ob-stat btn ob-nav-pill ob-vis-pill" data-a2="openexplorepicker" title="Regarder & Toucher · 10 Scènes Visuelles de Paris (0 anglais)">🗺️ Explorer</button>
       <button class="ob-stat btn ob-nav-pill ob-chr-pill" data-a2="chroniques" title="Les Chroniques de Paris · 6 Épisodes Narratifs A1→C2">🎬 Chroniques</button>
-      <button class="ob-stat btn ob-nav-pill ob-quick-pill" data-a2="quick60" title="Capsule Express 60s · 4 micro-actions & Coffre de Dopamine">⚡ Express 60s</button>
-      <button class="ob-stat btn ob-nav-pill" data-a2="amerun" title="L'Âme Française & Pensée Directe (A1→C2) · 36 réflexes natifs sans traduire">🇫🇷 Âme &amp; Pensée</button>
-      <button class="ob-stat btn ob-nav-pill" data-a2="amis" title="Mes 4 Amis Parisiens (Camille, Yanis, Céleste, Valcourt) · Zéro Solitude">🥂 Mes Amis</button>
-      <button class="ob-stat btn ob-nav-pill" data-a2="alldistricts" title="Les 10 Grands Quartiers de Paris">🏙️ Quartiers</button>
-      <button class="ob-stat btn ob-nav-pill" data-a2="perioderun" title="Architecte de la Période & Concordance des Modes"><img src="assets/pixel_plume.png" class="ob-mini-px" alt=""> Période &amp; Modes</button>
-      <button class="ob-stat btn ob-nav-pill" data-a2="jouterun" title="Joute Oratoire Contradictoire C2"><img src="assets/pixel_balance.png" class="ob-mini-px" alt=""> Joute C2</button>
-      <button class="ob-stat btn ob-nav-pill" data-a2="allidiomes" title="18 Idiomes, Litotes & Sous-Entendus"><img src="assets/pixel_masque.png" class="ob-mini-px" alt=""> Idiomes</button>
-      <button class="ob-stat btn ob-nav-pill" data-a2="pantheon" title="Panthéon des Immortels & 12 Sceaux de Paris"><img src="assets/pixel_pantheon.png" class="ob-mini-px" alt=""> Panthéon</button>
-      <button class="ob-stat btn ob-nav-pill" data-a2="atlas" title="Atlas de Maîtrise C2">🗺️ Atlas</button>
+      <button class="ob-stat btn ob-nav-pill ob-quick-pill" data-a2="swipe" title="Arcade Swipe Réflexe · Glissez ⬅️/➡️ par niveau A1→C2">⚡ Swipe</button>
+      <button class="ob-stat btn ob-nav-pill" data-a2="amis" title="Le Téléphone de Paris · Camille, Yanis, Céleste & Valcourt">📱 Amis</button>
+      <button class="ob-stat btn ob-nav-pill" data-a2="pantheon" title="Panthéon des Immortels & Sceaux A1→C2"><img src="assets/pixel_pantheon.png" class="ob-mini-px" alt=""> Panthéon</button>
+      <button class="ob-stat btn ob-nav-pill" data-a2="atlas" title="Atlas de Maîtrise A1 → C2">🗺️ Atlas</button>
       <button class="ob-stat btn ob-nav-pill ${CLOUD_SYNC.status === "synced" ? "ok" : ""}" id="ob-cloud-pill" data-a2="cloudsync" title="Synchronisation Bidirectionnelle Tablette Redmi Pad 2 Pro 5G ↔ PC">☁️ Sync ✓</button>
       <button class="ob-stat btn ob-nav-pill" id="ob-lang-pill" data-a2="toggleuilang" title="Switch between Beginner English+French Guide and 100% French Immersion">${isEnGuide() ? "🇬🇧 EN+FR" : "🇫🇷 FR"}</button>
       <div class="ob-sp"></div>
@@ -8193,8 +8901,9 @@
     const d = document.createElement("div"); d.id = "ody-drawer"; d.className = "ody-drawer-wrap";
     const tile = (sc, ic, t, sub) => `<button class="ody-tile-m" data-a2="scene" data-s="${sc}"><span class="ic">${ic}</span><b>${t}</b><small>${sub}</small></button>`;
     d.innerHTML = `<div class="ody-drawer">
-      <div class="ody-row between"><h3><img src="assets/odyssee_icon.png?v=26.0" class="ob-pixel-icon" alt=""> Menu · L'Odyssée v26.0</h3><button class="ody-btn ghost small" data-a2="closedrawer">✕</button></div>
-      <button class="ody-tile-m wide" data-a2="chroniques"><span class="ic">🎬</span><b>Les Chroniques de Paris (A1 → C2)</b><small>6 épisodes narratifs vivants · 30 scènes interactives (Écouter · Lire · Écrire · Parler)</small></button>
+      <div class="ody-row between"><h3><img src="assets/odyssee_icon.png?v=27.0" class="ob-pixel-icon" alt=""> Menu · L'Odyssée v27.0</h3><button class="ody-btn ghost small" data-a2="closedrawer">✕</button></div>
+      <button class="ody-tile-m wide" data-a2="openexplorepicker"><span class="ic">🗺️</span><b>Explorer Paris en Images (Regarder &amp; Toucher)</b><small>10 scènes illustrées interactives A1→C2 · Touchez les objets &amp; Chasse Audio (0 anglais)</small></button>
+      <button class="ody-tile-m wide" data-a2="chroniques"><span class="ic">🎬</span><b>Les Chroniques de Paris (A1 → C2)</b><small>6 épisodes narratifs vivants · 30 scènes illustrées (Écouter · Lire · Écrire · Parler)</small></button>
       <button class="ody-tile-m wide" data-a2="home"><span class="ic">🧭</span><b>Carte &amp; Odyssée</b><small>62 Mondes, Synergie A1→C2, Micro-Capsules 90s, Quartiers, Ateliers &amp; Examens</small></button>
       <button class="ody-tile-m wide" data-a2="cloudsync"><span class="ic">☁️</span><b>Tablette Redmi Pad 2 Pro 5G &amp; Sync Cloud</b><small>Synchronisation automatique Tablette ↔ PC &amp; Clavier Français Logitech</small></button>
       <button class="ody-tile-m wide" data-a2="atlas"><span class="ic">🗺️</span><b>Atlas de Maîtrise C2</b><small>Les 6 Époques (A1 → C2 → Natif) &amp; 7 Compétences sans limite de temps</small></button>
@@ -8244,10 +8953,15 @@
     d.addEventListener("click", (e) => { if (e.target === d) closeDrawer(); });
   }
   function closeDrawer() { const d = $("ody-drawer"); if (d) d.remove(); }
-  function renderPortfolio() {
-    closeDrawer(); SES = null; document.body.classList.remove("ody-in-session");
+  function renderPortfolio(fromBack) {
+    closeDrawer(); closeSheet(); SES = null; document.body.classList.remove("ody-in-session");
+    document.body.dataset.scene = "portfolio";
+    if (!fromBack) NAV.push({ kind: "view", scene: "portfolio" });
+    updateBar();
     const p = (CH().portfolio || []).slice().reverse();
-    $("app-main").innerHTML = `<div class="ody-result wide"><h2>📓 My writing</h2><p class="ody-goal">${p.length} texts. Rereading your old texts is the fastest way to see your progress.</p>
+    $("app-main").innerHTML = `<div class="ody-result wide">
+      <div class="ody-row between" style="margin-bottom:.6rem"><h2>📓 My writing</h2><button class="ody-btn ghost small" data-a2="back">← Retour</button></div>
+      <p class="ody-goal">${p.length} texts. Rereading your old texts is the fastest way to see your progress.</p>
       ${p.map((x) => `<div class="ody-port"><div class="ody-row between"><b>${esc(x.prompt || "")}</b><span class="ody-chip">${esc(x.level || "")} · ${x.score}/100 · ${esc(x.date)}</span></div><div class="ody-port-t">${esc(x.text)}</div></div>`).join("") || "<p>Nothing yet: missions and exams add your texts here.</p>"}
       <div class="ody-row center"><button class="ody-btn primary" data-a2="home">🏠 Path</button></div></div>`;
   }
@@ -8256,22 +8970,23 @@
   let OB = { step: 0, heard: null };
   function renderOnboarding(step) {
     OB.step = step;
-    document.body.dataset.scene = "home";
+    document.body.dataset.scene = "onboarding";
     const main = $("app-main");
+    const backRow = step > 0 ? `<div class="ody-row" style="margin-bottom:.5rem"><button class="ody-btn ghost small" data-a2="back">← Précédent</button></div>` : "";
     const steps = [
       `<div class="ody-ob">${camille("xl")}<h2>Bonjour ! I'm Camille.</h2><p class="ody-goal">I'll be your French teacher from your very first word to native-level French. First, let's check you can hear me.</p>
         <button class="ody-btn primary big" data-a2="ob" data-v="hear">🔊 Play Camille's voice</button>
         <div class="ody-row center" id="ody-ob-heard" style="${OB.heard === null ? "display:none" : ""}"><button class="ody-btn" data-a2="ob" data-v="yes">✅ I heard her</button><button class="ody-btn ghost" data-a2="ob" data-v="no">❌ No sound</button></div>
         <div id="ody-ob-help"></div></div>`,
-      `<div class="ody-ob">${camille("lg")}<h2>What's your name?</h2><input class="ody-input" id="ody-ob-name" placeholder="Your first name" value="${esc(CH().name || "")}">
+      `<div class="ody-ob">${backRow}${camille("lg")}<h2>What's your name?</h2><input class="ody-input" id="ody-ob-name" placeholder="Your first name" value="${esc(CH().name || "")}">
         <div class="ody-row center"><button class="ody-btn primary big" data-a2="ob" data-v="name">Continue ▸</button></div></div>`,
-      `<div class="ody-ob">${camille("lg")}<h2>Do you already speak some French?</h2>
+      `<div class="ody-ob">${backRow}${camille("lg")}<h2>Do you already speak some French?</h2>
         <div class="ody-ob-opts">
           <button class="ody-tile-m" data-a2="ob" data-v="zero"><span class="ic">🐣</span><b>Not at all</b><small>Start from the sounds of French</small></button>
           <button class="ody-tile-m" data-a2="ob" data-v="basics"><span class="ic">🙂</span><b>A little</b><small>Start at World 1 (skip the sounds)</small></button>
           <button class="ody-tile-m" data-a2="ob" data-v="test"><span class="ic">🧭</span><b>Find my level</b><small>20-question placement test</small></button>
         </div></div>`,
-      `<div class="ody-ob">${camille("lg")}<h2>Your daily goal</h2><p class="ody-goal">Native-level French comes from a little every day. Pick what you can really keep up.</p>
+      `<div class="ody-ob">${backRow}${camille("lg")}<h2>Your daily goal</h2><p class="ody-goal">Native-level French comes from a little every day. Pick what you can really keep up.</p>
         <div class="ody-ob-opts">${[[30, "10 min", "Relaxed"], [60, "20 min", "Steady"], [100, "30 min", "Serious"], [150, "45 min", "Intense"]].map(([v, t, l]) => `<button class="ody-tile-m" data-a2="ob" data-v="goal${v}"><span class="ic">⚡</span><b>${t}</b><small>${l} · ${v} XP</small></button>`).join("")}</div></div>`
     ];
     main.innerHTML = steps[step] || "";
@@ -8302,22 +9017,36 @@
   // ----------------------------------------------------------------- events
   document.addEventListener("click", (e) => {
     const a = e.target.closest("[data-a]");
-    if (a && ACT[a.dataset.a] && (SES || a.dataset.a === "say")) { e.preventDefault(); try { ACT[a.dataset.a](a, e); } catch (err) { console.error("ODY action", a.dataset.a, err); } return; }
+    if (a && ACT[a.dataset.a] && (SES || a.dataset.a === "say" || a.dataset.a === "acc")) { e.preventDefault(); try { ACT[a.dataset.a](a, e); } catch (err) { console.error("ODY action", a.dataset.a, err); } return; }
     const b = e.target.closest("[data-a2]");
     if (b && HOME_ACT[b.dataset.a2]) { e.preventDefault(); try { HOME_ACT[b.dataset.a2](b, e); } catch (err) { console.error("ODY home action", b.dataset.a2, err); } }
   });
   document.addEventListener("keydown", (e) => {
     const tag = (document.activeElement && document.activeElement.tagName) || "";
     const inInput = tag === "INPUT" || tag === "TEXTAREA";
+    if (e.key === "Escape") {
+      if (NAV.canGoBack()) { e.preventDefault(); NAV.back(); return; }
+    }
+    if (e.altKey && e.key === "ArrowLeft") {
+      e.preventDefault();
+      if (SES && SES.i > 0 && !SES.exam) { prev(); return; }
+      NAV.back();
+      return;
+    }
     if (!SES) {
       if (e.key === "Enter" && document.activeElement && document.activeElement.id === "amis-in") { e.preventDefault(); sendAmisMessage(); return; }
       if (e.key === "Enter" && !inInput && document.body.dataset.scene === "home") { const b = $("ody-primary"); if (b) { e.preventDefault(); b.click(); } }
       return;
     }
     const st = cur(); if (!st) return;
+    if (st.k === "swipe" && !SES.answered && !inInput && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+      e.preventDefault();
+      ACT.swipepick({ dataset: { side: e.key === "ArrowLeft" ? "left" : "right" } });
+      return;
+    }
     if (e.key === "Enter") {
       if (st.k === "write" && inInput && !e.ctrlKey && !SES.answered) return;
-      if ((st.k === "speakfree" || st.k === "speak" || st.k === "match") && !SES.answered) return;
+      if ((st.k === "speakfree" || st.k === "speak" || st.k === "match" || st.k === "explore" || st.k === "swipe" || st.k === "visreflex") && !SES.answered) return;
       if (["mcq", "listen", "dialogue", "reflex", "quest", "register", "radio", "enquete", "liaison", "forgeron", "joute", "idiome", "synthese", "periode", "concordance", "ame", "pensee"].includes(st.k) && !SES.answered) return;
       e.preventDefault();
       if (SES.answered) return ACT.next();
@@ -8326,13 +9055,18 @@
     }
     const digitKey = /^[1-6]$/.test(e.key) ? +e.key : (/^(?:Digit|Numpad)([1-6])$/.test(e.code || "") ? +RegExp.$1 : 0);
     if (!inInput && digitKey >= 1 && digitKey <= 6 && !SES.answered) {
-      const btns = document.querySelectorAll(".ody-choice");
+      const btns = document.querySelectorAll(".ody-choice, .vis-opt");
       const b = btns[digitKey - 1];
       if (b && !b.disabled) { e.preventDefault(); b.click(); return; }
     }
     if (!inInput && e.key === " " && (st.fr || st.npc)) {
       e.preventDefault();
-      speak(st.fr || st.npc, e.altKey ? 1.25 : e.shiftKey ? 0.7 : 1);
+      speak(st.fr || st.npc, (e.ctrlKey && e.shiftKey) ? 1.25 : e.shiftKey ? 0.7 : 1);
+      return;
+    }
+    if (!inInput && !e.ctrlKey && !e.altKey && (e.key === "f" || e.key === "F") && (st.fr || st.npc)) {
+      e.preventDefault();
+      speak(st.fr || st.npc, 1.25);
       return;
     }
     if ((e.altKey && (e.key === "h" || e.key === "H")) && !SES.answered && (st.k === "type" || st.k === "memory") && ACT.letterhint) {
@@ -8340,7 +9074,6 @@
       ACT.letterhint();
       return;
     }
-    if (e.key === "Escape") { closeSheet(); closeDrawer(); }
   });
 
   // ----------------------------------------------------------------- take over navigation
@@ -8357,6 +9090,7 @@
       }
       if (scene === "title" || scene === "home" || scene === "bootcamp" || scene === "chemin") {
         if (SES) return; // never yank the player out of a running session
+        NAV.stack = [{ kind: "view", scene: "home" }];
         return renderHome();
       }
       if (scene === "academy") {
@@ -8369,13 +9103,15 @@
       SES = null; stopAudio(); micStop(); closeDrawer(); closeSheet();
       document.body.classList.remove("ody-in-session");
       document.body.dataset.scene = scene;
+      NAV.push({ kind: "view", scene });
       if (legacyNav) legacyNav(scene);
       updateBar();
     };
     window.continueJourney = () => go(nextNode().id);
     window.ODY_HOME = renderHome;
+    window.ODY_BACK = () => NAV.back();
     window.speakFrench = (t, r) => speak(t, r);
-    Object.assign(window.ODY, { go, startSession, startMicroCapsule, getMicroCapsules, nodeMicroProgress, buildQuick60Session, buildPillarRepSession, buildChroniqueSession, openChroniquesSheet, computeNativeUpgrade, openAmisSheet, sendAmisMessage, AMIS_DE_PARIS, AME_CASES, PENSEE_CASES, buildAmeSteps, buildPenseeSteps, buildAmeSession, openAmeSheet, levelSynergyBarHtml, levelNodes, buildSessionFor, buildExamSession, buildReviewSession, buildPlacementSession, buildBlitzSession, buildShadowSession, buildImprovSession, buildSleuthForgeSession, buildJouteSession, buildJouteSteps, buildIdiomeSession, buildIdiomeSteps, buildSyntheseSteps, buildPeriodeSession, buildPeriodeSteps, buildConcordanceSteps, buildEnqueteSteps, buildLiaisonSteps, buildForgeronSteps, buildWeakSpotSession, buildDistrictSession, buildAtelierSession, openCollectionSheet, openIdiomeSheet, openPeriodeSheet, openPantheonSheet, openCloudSyncSheet, pullFromCloud, pushToCloudNow, mergeExternalSave, isPrivateAuthorized, unlockPrivateGate, renderPrivateLockGate, PRIV_KEY, CLOUD_SYNC, TABLET_PWA_URL, renderHome, renderOdysseyAtlas, renderPlan90, hasPartialProgress, savePartial, state: () => SES, cur, ACT, HOME_ACT, reviewCards, levelOfNode, currentLevel });
+    Object.assign(window.ODY, { go, prev, NAV, startSession, startMicroCapsule, getMicroCapsules, nodeMicroProgress, activeArcCards, buildQuick60Session, buildPillarRepSession, buildChroniqueSession, openChroniquesSheet, buildExploreSession, openExplorePickerSheet, buildVisReflexSteps, buildSwipeSession, computeNativeUpgrade, openAmisSheet, sendAmisMessage, AMIS_DE_PARIS, AME_CASES, PENSEE_CASES, buildAmeSteps, buildPenseeSteps, buildAmeSession, openAmeSheet, levelSynergyBarHtml, levelMasteryBarHtml, levelNodes, buildSessionFor, buildExamSession, buildReviewSession, buildPlacementSession, buildBlitzSession, buildShadowSession, buildImprovSession, buildSleuthForgeSession, buildJouteSession, buildJouteSteps, buildIdiomeSession, buildIdiomeSteps, buildSyntheseSteps, buildPeriodeSession, buildPeriodeSteps, buildConcordanceSteps, buildEnqueteSteps, buildLiaisonSteps, buildForgeronSteps, buildQuestSteps, buildWeakSpotSession, buildDistrictSession, buildAtelierSession, openCollectionSheet, openIdiomeSheet, openPeriodeSheet, openPantheonSheet, openCloudSyncSheet, pullFromCloud, pushToCloudNow, mergeExternalSave, isPrivateAuthorized, unlockPrivateGate, renderPrivateLockGate, PRIV_KEY, CLOUD_SYNC, TABLET_PWA_URL, renderHome, renderOdysseyAtlas, renderPlan90, hasPartialProgress, savePartial, state: () => SES, cur, ACT, HOME_ACT, reviewCards, levelOfNode, currentLevel });
     document.body.classList.add("ody14");
     if (!isPrivateAuthorized()) {
       renderPrivateLockGate();
